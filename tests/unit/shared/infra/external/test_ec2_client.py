@@ -37,40 +37,6 @@ class TestEC2Client:
             mock_make_request.assert_called_once_with("http://banana-analysis-api.com/detect", expected_payload)
 
     @pytest.mark.asyncio
-    async def test_analyze_maturation_success(self):
-        image_url = "https://fruit-analysis-bucket.s3.amazonaws.com/banana_maturation_sample.jpg"
-        metadata = {"user_id": "banana_ripeness_expert"}
-
-        mock_response = {
-            "status": "success",
-            "request_id": "banana-maturation-req-7832",
-            "results": [
-                {
-                    "class_name": "banana",
-                    "confidence": 0.95,
-                    "bounding_box": [0.1, 0.2, 0.3, 0.4],
-                    "maturation_level": {
-                        "score": 0.8,
-                        "category": "ripe",
-                        "estimated_days_until_spoilage": 3,
-                    },
-                }
-            ],
-            "summary": {"average_maturation_score": 0.8, "detection_time_ms": 450},
-            "image_result_url": "https://fruit-analysis-bucket.s3.amazonaws.com/results/banana_maturation_result.jpg",
-        }
-
-        with patch.object(EC2Client, "_make_request", new_callable=AsyncMock) as mock_make_request:
-            mock_make_request.return_value = mock_response
-
-            ec2_client = EC2Client(base_url="http://banana-analysis-api.com")
-            result = await ec2_client.analyze_maturation(image_url, metadata)
-
-            assert result == mock_response
-            expected_payload = {"image_url": image_url, "metadata": metadata}
-            mock_make_request.assert_called_once_with("http://banana-analysis-api.com/maturation", expected_payload)
-
-    @pytest.mark.asyncio
     async def test_make_request_success(self):
         url = "http://banana-analysis-api.com/detect"
         payload = {"image_url": "https://fruit-analysis-bucket.s3.amazonaws.com/banana_ripeness_check.jpg"}

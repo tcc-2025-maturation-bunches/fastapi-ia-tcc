@@ -31,10 +31,11 @@ class CombinedResult:
         self.updated_at = updated_at or datetime.now(timezone.utc)
         self.combined_id = combined_id or f"combined-{uuid4()}"
 
-        if maturation_result and maturation_result.status == "success":
-            self.status = "completed"
-        elif detection_result.status == "success":
-            self.status = "detection_completed"
+        if detection_result and detection_result.status == "success":
+            if detection_result.model_type == ModelType.COMBINED:
+                self.status = "completed"
+            else:
+                self.status = "detection_completed"
         else:
             self.status = "error"
 
@@ -43,6 +44,11 @@ class CombinedResult:
 
     def _calculate_total_processing_time(self) -> int:
         """Calcula o tempo total de processamento."""
+        if self.detection_result.model_type == ModelType.COMBINED:
+            return self.detection_result.summary.get(
+                "total_processing_time_ms", 0
+            ) or self.detection_result.summary.get("detection_time_ms", 0)
+
         detection_time = self.detection_result.summary.get("detection_time_ms", 0)
         maturation_time = 0
         if self.maturation_result:
@@ -51,10 +57,8 @@ class CombinedResult:
 
     def _merge_results(self) -> List[Dict[str, Any]]:
         """Mescla os resultados de detecção e maturação."""
-        if not self.maturation_result:
+        if self.detection_result.model_type == ModelType.COMBINED:
             return [r.to_dict() for r in self.detection_result.results]
-
-        return [r.to_dict() for r in self.maturation_result.results]
 
     def to_dict(self) -> Dict[str, Any]:
         """Converte a entidade para dicionário."""
@@ -72,6 +76,7 @@ class CombinedResult:
                 "processing_timestamp": self.detection_result.processing_timestamp.isoformat(),
                 "summary": self.detection_result.summary,
                 "image_result_url": self.detection_result.image_result_url,
+                "model_type": self.detection_result.model_type.value,
             },
             "results": self.results,
             "total_processing_time_ms": self.total_processing_time_ms,
@@ -121,9 +126,15 @@ class CombinedResult:
                 detection_result_obj = DetectionResult.from_dict(result_data)
                 detection_results.append(detection_result_obj)
 
+            model_type_str = detection_data.get("model_type", "detection")
+            try:
+                model_type = ModelType(model_type_str)
+            except ValueError:
+                model_type = ModelType.DETECTION
+
             detection_result = ProcessingResult(
                 image_id=data["image_id"],
-                model_type=ModelType.DETECTION,
+                model_type=model_type,
                 results=detection_results,
                 status=detection_data.get("status", "error"),
                 request_id=detection_data.get("request_id"),

@@ -32,12 +32,13 @@ async def process_image_combined(
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Erro ao processar metadados: {str(e)}")
 
+        maturation_threshold = request.maturation_threshold or settings.MIN_DETECTION_CONFIDENCE
+
         request_id = await combined_usecase.start_processing(
             image_url=str(request.image_url),
             user_id=request.user_id,
             metadata=metadata,
-            maturation_threshold=request.maturation_threshold or settings.MIN_DETECTION_CONFIDENCE,
-            skip_maturation=not request.perform_maturation,
+            maturation_threshold=maturation_threshold,
             location=request.location,
         )
 
@@ -47,8 +48,7 @@ async def process_image_combined(
             image_url=str(request.image_url),
             user_id=request.user_id,
             metadata=metadata,
-            maturation_threshold=request.maturation_threshold or settings.MIN_DETECTION_CONFIDENCE,
-            skip_maturation=not request.perform_maturation,
+            maturation_threshold=maturation_threshold,
             location=request.location,
         )
 
@@ -110,13 +110,23 @@ async def get_combined_results(
         if updated_at is None:
             updated_at = datetime.now(timezone.utc).isoformat()
 
+        detection_info = combined_result_dict.get("detection", {})
+        if not detection_info and result.detection_result:
+            detection_info = {
+                "request_id": result.detection_result.request_id,
+                "status": result.detection_result.status,
+                "processing_timestamp": result.detection_result.processing_timestamp.isoformat(),
+                "summary": result.detection_result.summary,
+                "image_result_url": result.detection_result.image_result_url,
+            }
+
         response_data = {
             "combined_id": combined_result_dict.get("combined_id"),
             "image_id": combined_result_dict.get("image_id"),
             "user_id": combined_result_dict.get("user_id"),
             "status": combined_result_dict.get("status"),
             "total_processing_time_ms": result.total_processing_time_ms,
-            "detection": combined_result_dict.get("detection", {}),
+            "detection": detection_info,
             "results": result._merge_results(),
             "location": combined_result_dict.get("location"),
             "processing_timestamp": processing_timestamp,
@@ -157,13 +167,23 @@ async def get_results_by_request_id(
         if updated_at is None:
             updated_at = datetime.now(timezone.utc).isoformat()
 
+        detection_info = combined_result_dict.get("detection", {})
+        if not detection_info and result.detection_result:
+            detection_info = {
+                "request_id": result.detection_result.request_id,
+                "status": result.detection_result.status,
+                "processing_timestamp": result.detection_result.processing_timestamp.isoformat(),
+                "summary": result.detection_result.summary,
+                "image_result_url": result.detection_result.image_result_url,
+            }
+
         response_data = {
             "combined_id": combined_result_dict.get("combined_id"),
             "image_id": combined_result_dict.get("image_id"),
             "user_id": combined_result_dict.get("user_id"),
             "status": combined_result_dict.get("status"),
             "total_processing_time_ms": result.total_processing_time_ms,
-            "detection": combined_result_dict.get("detection", {}),
+            "detection": detection_info,
             "results": result._merge_results(),
             "location": combined_result_dict.get("location"),
             "processing_timestamp": processing_timestamp,

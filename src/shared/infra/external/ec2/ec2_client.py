@@ -15,7 +15,7 @@ class EC2Client:
         self.base_url = base_url or settings.EC2_IA_ENDPOINT
         self.timeout = timeout or settings.REQUEST_TIMEOUT
         self.detect_endpoint = f"{self.base_url}/detect"
-        self.maturation_endpoint = f"{self.base_url}/maturation"
+        self.combined_endpoint = f"{self.base_url}/process-combined"
         logger.info(f"Inicializando cliente EC2 para endpoint {self.base_url}")
 
     async def _make_request(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -38,19 +38,27 @@ class EC2Client:
             logger.error(f"Erro inesperado ao processar requisição: {e}")
             return {"status": "error", "error_message": f"Erro inesperado: {str(e)}"}
 
-    async def detect_objects(self, image_url: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        payload = {"image_url": image_url, "metadata": metadata or {}}
+    async def detect_objects(
+        self, image_url: str, result_upload_url: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        payload = {"image_url": image_url, "result_upload_url": result_upload_url, "metadata": metadata or {}}
 
         logger.info(f"Enviando solicitação de detecção para imagem: {image_url}")
         return await self._make_request(self.detect_endpoint, payload)
 
-    async def analyze_maturation(self, image_url: str, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        payload = {"image_url": image_url, "metadata": metadata or {}}
+    async def process_combined(
+        self,
+        image_url: str,
+        result_upload_url: str,
+        maturation_threshold: float = 0.6,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        payload = {
+            "image_url": image_url,
+            "result_upload_url": result_upload_url,
+            "maturation_threshold": maturation_threshold,
+            "metadata": metadata or {},
+        }
 
-        logger.info(f"Enviando solicitação de análise de maturação para imagem: {image_url}")
-        return await self._make_request(self.maturation_endpoint, payload)
-
-    async def analyze_maturation_with_boxes(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        url = f"{self.base_url}/maturation-with-boxes"
-        logger.info(f"Enviando solicitação de análise de maturação com caixas para imagem: {payload.get('image_url')}")
-        return await self._make_request(url, payload)
+        logger.info(f"Enviando solicitação de processamento combinado para imagem: {image_url}")
+        return await self._make_request(self.combined_endpoint, payload)
