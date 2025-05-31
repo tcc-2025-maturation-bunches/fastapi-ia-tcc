@@ -41,6 +41,27 @@ class ImageUploadUseCase:
         except Exception as e:
             logger.exception(f"Erro ao gerar URL pré-assinada: {e}")
             raise
+        
+    async def generate_result_presigned_url(self, filename: str, content_type: str, user_id: str) -> Dict[str, Any]:
+        try:
+            key = await self.s3_repository.generate_result_key(filename, user_id)
+            presigned_url_data = await self.s3_repository.generate_result_presigned_url(
+                key=key, content_type=content_type, expires_in=timedelta(minutes=15)
+            )
+
+            response = {
+                "upload_url": presigned_url_data["upload_url"],
+                "result_id": key.split("/")[-1].split(".")[0],
+                "expires_in_seconds": presigned_url_data["expires_in_seconds"],
+                "key": key,
+            }
+
+            logger.info(f"URL pré-assinada gerada para upload de resultado: {response['result_id']}")
+            return response
+
+        except Exception as e:
+            logger.exception(f"Erro ao gerar URL pré-assinada para resultado: {e}")
+            raise
 
     async def upload_image(
         self,

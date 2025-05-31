@@ -1,3 +1,4 @@
+import time
 import logging
 from contextlib import asynccontextmanager
 
@@ -56,6 +57,17 @@ async def root():
         "health": "/health-check",
     }
 
+@app.get("/health-check", tags=["Health Check"])
+async def health_check():
+    start_time = time.time()
+    health_status = "healthy"
+    end_time = time.time()
+    response_time = round((end_time - start_time) * 1000, 2)
+    
+    return {
+        "status": health_status,
+        "response_time_ms": response_time
+    }
 
 if __name__ == "__main__":
     import uvicorn
