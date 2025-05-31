@@ -52,7 +52,7 @@ class S3Repository(S3RepositoryInterface):
         """
         logger.info(f"Gerando URL pré-assinada para upload de imagem: {key}")
         return await self.images_client.generate_presigned_url(key, content_type, expires_in)
-    
+
     async def generate_result_presigned_url(
         self, key: str, content_type: str, expires_in: timedelta = timedelta(minutes=15)
     ) -> Dict[str, Any]:
@@ -90,7 +90,7 @@ class S3Repository(S3RepositoryInterface):
 
         now = datetime.now(timezone.utc)
         return f"{user_id}/{now.year}/{now.month:02d}/{now.day:02d}/{unique_id}.{ext}"
-    
+
     async def generate_result_key(self, original_filename: str, user_id: str) -> str:
         """
         Gera uma chave única para o resultado no S3.

@@ -42,6 +42,7 @@ async def generate_presigned_url(
         logger.exception(f"Erro ao gerar URL pré-assinada: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao gerar URL pré-assinada: {str(e)}")
 
+
 @storage_router.post("/presigned-result-url", response_model=PresignedUrlResponse)
 async def generate_presigned_result_url(
     request: PresignedUrlRequest,
@@ -64,6 +65,7 @@ async def generate_presigned_result_url(
     except Exception as e:
         logger.exception(f"Erro ao gerar URL pré-assinada para resultado: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao gerar URL pré-assinada para resultado: {str(e)}")
+
 
 @storage_router.post("/upload", response_model=dict)
 async def upload_image(
