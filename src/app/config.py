@@ -1,4 +1,4 @@
-# src/app/config.py
+# src/app/config.py - VERSÃO ATUALIZADA
 import os
 from typing import Any, Dict
 
@@ -11,7 +11,7 @@ class Settings:
         self.ENVIRONMENT = os.getenv("ENVIRONMENT", "dev")
         self.DEBUG = os.getenv("DEBUG", "True").lower() == "true"
         self.APP_NAME = "fruit-detection-api"
-        self.APP_VERSION = "0.1.0"
+        self.APP_VERSION = "0.1.1"
 
         # Configurações da AWS
         self.AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
@@ -21,6 +21,10 @@ class Settings:
 
         # DynamoDB
         self.DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", f"{self.resource_prefix}-results")
+        self.DYNAMODB_DEVICES_TABLE = os.getenv("DYNAMODB_DEVICES_TABLE", f"{self.resource_prefix}-devices")
+        self.DYNAMODB_DEVICE_ACTIVITIES_TABLE = os.getenv(
+            "DYNAMODB_DEVICE_ACTIVITIES_TABLE", f"{self.resource_prefix}-device-activities"
+        )
 
         # S3
         self.S3_IMAGES_BUCKET = os.getenv("S3_IMAGES_BUCKET", f"{self.resource_prefix}-images")
@@ -44,6 +48,12 @@ class Settings:
         self.ENABLE_AUTO_MATURATION = os.getenv("ENABLE_AUTO_MATURATION", "True").lower() == "true"
         self.MIN_DETECTION_CONFIDENCE = float(os.getenv("MIN_DETECTION_CONFIDENCE", "0.6"))
         self.MIN_MATURATION_CONFIDENCE = float(os.getenv("MIN_MATURATION_CONFIDENCE", "0.7"))
+
+        # Configurações de monitoramento de dispositivos
+        self.DEVICE_HEARTBEAT_TIMEOUT_MINUTES = int(os.getenv("DEVICE_HEARTBEAT_TIMEOUT", "5"))
+        self.DEVICE_CHECK_INTERVAL_SECONDS = int(os.getenv("DEVICE_CHECK_INTERVAL", "60"))
+        self.DEVICE_OFFLINE_CLEANUP_HOURS = int(os.getenv("DEVICE_OFFLINE_CLEANUP", "24"))
+        self.MAX_DEVICES_PER_LOCATION = int(os.getenv("MAX_DEVICES_PER_LOCATION", "50"))
 
         # Configurações de cache (opcional para versões futuras)
         self.ENABLE_CACHE = os.getenv("ENABLE_CACHE", "False").lower() == "true"
@@ -118,6 +128,22 @@ class Settings:
             "enable_auto_maturation": self.ENABLE_AUTO_MATURATION,
             "min_detection_confidence": self.MIN_DETECTION_CONFIDENCE,
             "min_maturation_confidence": self.MIN_MATURATION_CONFIDENCE,
+        }
+
+    def get_device_monitoring_config(self) -> Dict[str, Any]:
+        """
+        Retorna as configurações de monitoramento de dispositivos.
+
+        Returns:
+            Dict[str, Any]: Configurações de dispositivos
+        """
+        return {
+            "devices_table": self.DYNAMODB_DEVICES_TABLE,
+            "activities_table": self.DYNAMODB_DEVICE_ACTIVITIES_TABLE,
+            "heartbeat_timeout_minutes": self.DEVICE_HEARTBEAT_TIMEOUT_MINUTES,
+            "check_interval_seconds": self.DEVICE_CHECK_INTERVAL_SECONDS,
+            "offline_cleanup_hours": self.DEVICE_OFFLINE_CLEANUP_HOURS,
+            "max_devices_per_location": self.MAX_DEVICES_PER_LOCATION,
         }
 
 

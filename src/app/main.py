@@ -5,9 +5,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.modules.device_monitoring.controller.device_controller import monitoring_router
 from src.modules.ia_integration.controller.combined_controller import combined_router
 from src.modules.ia_integration.controller.ia_controller import ia_router
-from src.modules.monitoring.controller.monitoring_controller import monitoring_router
 from src.modules.status.controller.status_controller import status_router
 from src.modules.storage.controller.storage_controller import storage_router
 
@@ -44,8 +44,8 @@ app.add_middleware(
 
 app.include_router(ia_router)
 app.include_router(combined_router)
-app.include_router(storage_router)
 app.include_router(monitoring_router)
+app.include_router(storage_router)
 app.include_router(status_router)
 
 
