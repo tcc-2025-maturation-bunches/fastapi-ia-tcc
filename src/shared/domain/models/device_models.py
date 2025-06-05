@@ -48,14 +48,14 @@ class DeviceRegistrationRequest(BaseModel):
     device_name: str = Field(..., min_length=1, max_length=200)
     location: str = Field(..., min_length=1, max_length=200)
     capabilities: Optional[DeviceCapabilities] = None
-    status: str = Field("online", regex="^(online|offline|pending|maintenance)$")
+    status: str = Field("online", pattern="^(online|offline|pending|maintenance)$")
     last_seen: Optional[datetime] = None
 
 
 class DeviceStatusUpdate(BaseModel):
     """Modelo para atualização de status do dispositivo."""
 
-    status: str = Field(..., regex="^(online|offline|maintenance|error)$")
+    status: str = Field(..., pattern="^(online|offline|maintenance|error)$")
     last_seen: Optional[datetime] = None
     additional_data: Optional[Dict[str, Any]] = None
 
@@ -111,7 +111,7 @@ class ProcessingJobResponse(BaseModel):
 class DeviceListFilter(BaseModel):
     """Modelo para filtros de listagem de dispositivos."""
 
-    status: Optional[str] = Field(None, regex="^(online|offline|pending|maintenance|error)$")
+    status: Optional[str] = Field(None, pattern="^(online|offline|pending|maintenance|error)$")
     location: Optional[str] = None
     device_type: Optional[str] = None
     last_seen_hours: Optional[int] = Field(None, ge=1, le=168)  # Últimas N horas
@@ -151,7 +151,7 @@ class GlobalConfigRequest(BaseModel):
     processing_timeout: int = Field(30, ge=10, le=120)
     min_capture_interval: int = Field(30, ge=10, le=300)
     image_quality: int = Field(85, ge=50, le=100)
-    max_resolution: str = Field("1280x720", regex="^(1920x1080|1280x720|640x480)$")
+    max_resolution: str = Field("1280x720", pattern="^(1920x1080|1280x720|640x480)$")
     min_detection_confidence: float = Field(0.6, ge=0.1, le=1.0)
     min_maturation_confidence: float = Field(0.7, ge=0.1, le=1.0)
 
@@ -198,8 +198,8 @@ class DeviceAlertRequest(BaseModel):
     """Modelo para alertas de dispositivos."""
 
     device_id: str
-    alert_type: str = Field(..., regex="^(offline|error|maintenance|low_disk|high_temp)$")
-    severity: str = Field("medium", regex="^(low|medium|high|critical)$")
+    alert_type: str = Field(..., pattern="^(offline|error|maintenance|low_disk|high_temp)$")
+    severity: str = Field("medium", pattern="^(low|medium|high|critical)$")
     message: str
     metadata: Optional[Dict[str, Any]] = None
 
@@ -208,7 +208,7 @@ class DeviceMaintenanceRequest(BaseModel):
     """Modelo para solicitação de manutenção."""
 
     device_id: str
-    maintenance_type: str = Field(..., regex="^(scheduled|emergency|preventive|corrective)$")
+    maintenance_type: str = Field(..., pattern="^(scheduled|emergency|preventive|corrective)$")
     description: str
     scheduled_for: Optional[datetime] = None
     estimated_duration_minutes: Optional[int] = Field(None, ge=5, le=1440)
@@ -218,5 +218,5 @@ class BulkDeviceAction(BaseModel):
     """Modelo para ações em lote nos dispositivos."""
 
     device_ids: List[str] = Field(..., min_items=1, max_items=50)
-    action: str = Field(..., regex="^(update_config|restart|maintenance|delete)$")
+    action: str = Field(..., pattern="^(update_config|restart|maintenance|delete)$")
     parameters: Optional[Dict[str, Any]] = None
