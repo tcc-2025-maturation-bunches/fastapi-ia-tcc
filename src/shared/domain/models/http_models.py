@@ -13,8 +13,8 @@ from src.shared.domain.models.base_models import (
     ProcessingSummary,
 )
 from src.shared.domain.models.combined_models import (
+    CombinedContractResponse,
     CombinedProcessingRequest,
-    CombinedProcessingResponse,
     ProcessingConfig,
 )
 from src.shared.domain.models.device_models import (
@@ -48,7 +48,7 @@ __all__ = [
     "PresignedUrlResponse",
     "ProcessingStatusResponse",
     "CombinedProcessingRequest",
-    "CombinedProcessingResponse",
+    "CombinedContractResponse",
     "ProcessingConfig",
     "DeviceRegistrationRequest",
     "DeviceResponse",

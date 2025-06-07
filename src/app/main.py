@@ -1,15 +1,18 @@
 import logging
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from src.modules.device_monitoring.controller.device_controller import monitoring_router
 from src.modules.ia_integration.controller.combined_controller import combined_router
 from src.modules.ia_integration.controller.ia_controller import ia_router
 from src.modules.status.controller.status_controller import status_router
 from src.modules.storage.controller.storage_controller import storage_router
+from src.shared.domain.exception.processing_exceptions import PartialProcessingError
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,6 +69,27 @@ async def health_check():
     response_time = round((end_time - start_time) * 1000, 2)
 
     return {"status": health_status, "response_time_ms": response_time}
+
+
+@app.exception_handler(PartialProcessingError)
+async def partial_error_handler(request: Request, exc: PartialProcessingError):
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "partial_error",
+            "request_id": getattr(exc, "request_id", "unknown"),
+            "error_code": exc.error_code,
+            "error_message": exc.error_message,
+            "error_details": {
+                "stage": exc.stage,
+                "original_error": exc.original_error,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+            "detection": exc.detection_result,
+            "image_result_url": getattr(exc, "image_result_url", None),
+            "processing_time_ms": getattr(exc, "processing_time_ms", 0),
+        },
+    )
 
 
 if __name__ == "__main__":
