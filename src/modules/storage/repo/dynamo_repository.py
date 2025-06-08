@@ -138,3 +138,11 @@ class DynamoRepository(DynamoRepositoryInterface):
         except Exception as e:
             logger.exception(f"Erro ao recuperar resultado combinado do DynamoDB: {e}")
             raise
+
+    async def save_request_summary(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            logger.info(f"Salvando resumo da requisição {item.get('request_id')} no DynamoDB")
+            return await self.dynamo_client.put_item(item)
+        except Exception as e:
+            logger.exception(f"Erro ao salvar resumo da requisição no DynamoDB: {e}")
+            raise

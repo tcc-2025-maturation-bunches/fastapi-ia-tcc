@@ -9,6 +9,7 @@ from src.modules.storage.repo.s3_repository import S3Repository
 from src.shared.domain.entities.combined_result import CombinedResult
 from src.shared.domain.entities.image import Image
 from src.shared.domain.models.http_models import ProcessingStatusResponse
+from src.shared.mappers.request_summary_mapper import RequestSummaryMapper
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +81,7 @@ class CombinedProcessingUseCase:
                 metadata=metadata,
                 image_id=metadata.get("image_id") if metadata else None,
             )
-            await self.dynamo_repository.save_image_metadata(image)
-
+            
             await self._update_processing_status(request_id, image_id=image.image_id, progress=0.2)
 
             if not result_upload_url:
@@ -99,12 +99,19 @@ class CombinedProcessingUseCase:
                 result_upload_url=result_upload_url,
                 maturation_threshold=maturation_threshold,
             )
+            
+            full_metadata = metadata or {}
+            full_metadata['image_url'] = image_url
+            full_metadata['image_id'] = image.image_id
 
-            await self.dynamo_repository.save_processing_result(combined_result)
-            await self._update_processing_status(request_id, combined_complete=True, progress=0.8, status="finalizing")
+            final_item = RequestSummaryMapper.to_dynamo_item(
+                user_id=user_id,
+                request_id=request_id,
+                initial_metadata=full_metadata,
+                combined_result=combined_result
+            )
 
-            # Salva o CombinedResult diretamente, sem campos extras
-            await self.dynamo_repository.save_combined_result(combined_result)
+            await self.dynamo_repository.save_request_summary(final_item)
 
             await self._update_processing_status(request_id, status="completed", progress=1.0)
 
