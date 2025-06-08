@@ -217,6 +217,6 @@ class DeviceMaintenanceRequest(BaseModel):
 class BulkDeviceAction(BaseModel):
     """Modelo para ações em lote nos dispositivos."""
 
-    device_ids: List[str] = Field(..., min_items=1, max_items=50)
+    device_ids: List[str] = Field(..., min_length=1, max_length=50)
     action: str = Field(..., pattern="^(update_config|restart|maintenance|delete)$")
     parameters: Optional[Dict[str, Any]] = None

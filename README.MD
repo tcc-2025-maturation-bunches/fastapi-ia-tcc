@@ -74,8 +74,8 @@ projeto-fastapi-lambda/
 
 1. Clone o repositório:
 ```bash
-git clone https://github.com/seu-usuario/projeto-fastapi-lambda.git
-cd projeto-fastapi-lambda
+git clone https://github.com/tcc-2025-maturation-bunches/fastapi-ia-tcc
+cd fastapi-ia-tcc
 ```
 
 2. Crie e ative um ambiente virtual:

@@ -81,7 +81,7 @@ class CombinedProcessingUseCase:
                 metadata=metadata,
                 image_id=metadata.get("image_id") if metadata else None,
             )
-            
+
             await self._update_processing_status(request_id, image_id=image.image_id, progress=0.2)
 
             if not result_upload_url:
@@ -99,16 +99,13 @@ class CombinedProcessingUseCase:
                 result_upload_url=result_upload_url,
                 maturation_threshold=maturation_threshold,
             )
-            
+
             full_metadata = metadata or {}
-            full_metadata['image_url'] = image_url
-            full_metadata['image_id'] = image.image_id
+            full_metadata["image_url"] = image_url
+            full_metadata["image_id"] = image.image_id
 
             final_item = RequestSummaryMapper.to_dynamo_item(
-                user_id=user_id,
-                request_id=request_id,
-                initial_metadata=full_metadata,
-                combined_result=combined_result
+                user_id=user_id, request_id=request_id, initial_metadata=full_metadata, combined_result=combined_result
             )
 
             await self.dynamo_repository.save_request_summary(final_item)

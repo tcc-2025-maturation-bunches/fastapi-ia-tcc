@@ -3,6 +3,7 @@ from typing import Any, Dict
 
 from src.shared.domain.entities.combined_result import CombinedResult
 
+
 class RequestSummaryMapper:
     @staticmethod
     def to_dynamo_item(
@@ -12,7 +13,7 @@ class RequestSummaryMapper:
         combined_result: CombinedResult,
     ) -> Dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
-        
+
         detection_data = combined_result.detection
         detection_result_dict = detection_data.model_dump(exclude_none=True) if detection_data else {}
 
@@ -34,7 +35,11 @@ class RequestSummaryMapper:
                 "notes": initial_metadata.get("notes"),
             },
             "detection_result": detection_result_dict,
-            "processing_metadata": combined_result.processing_metadata.model_dump(exclude_none=True) if combined_result.processing_metadata else None,
+            "processing_metadata": (
+                combined_result.processing_metadata.model_dump(exclude_none=True)
+                if combined_result.processing_metadata
+                else None
+            ),
             "error_info": None,
         }
 

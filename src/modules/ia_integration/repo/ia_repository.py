@@ -1,12 +1,12 @@
 import logging
 from typing import Optional
 
-from shared.domain.entities.combined_result import CombinedResult
-from shared.domain.models.base_models import ContractDetectionSummary, ProcessingMetadata
-from shared.domain.models.combined_models import ContractDetection, ContractDetectionResult
+from src.shared.domain.entities.combined_result import CombinedResult
 from src.shared.domain.entities.image import Image
 from src.shared.domain.entities.result import DetectionResult, ProcessingResult
 from src.shared.domain.enums.ia_model_type_enum import ModelType
+from src.shared.domain.models.base_models import ContractDetectionSummary, ProcessingMetadata
+from src.shared.domain.models.combined_models import ContractDetection, ContractDetectionResult
 from src.shared.infra.external.ec2.ec2_client import EC2Client
 from src.shared.infra.repo.ia_repository_interface import IARepositoryInterface
 
