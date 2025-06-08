@@ -31,15 +31,14 @@ async def process_image(
                 user_id=request.user_id,
                 metadata=metadata,
             )
+            response_data = result.to_contract_dict()
+            return ProcessingResponse(**response_data)
         elif request.model_type == ModelType.COMBINED:
             raise HTTPException(
                 status_code=400, detail="Para processamento combinado, use o endpoint /combined/process."
             )
         else:
             raise HTTPException(status_code=400, detail=f"Tipo de modelo inválido: {request.model_type}")
-
-        response_data = result.to_dict()
-        return ProcessingResponse(**response_data)
 
     except HTTPException:
         raise

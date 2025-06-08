@@ -1,6 +1,9 @@
 import logging
 from typing import Optional
 
+from shared.domain.entities.combined_result import CombinedResult
+from shared.domain.models.base_models import ContractDetectionSummary, ProcessingMetadata
+from shared.domain.models.combined_models import ContractDetection, ContractDetectionResult
 from src.shared.domain.entities.image import Image
 from src.shared.domain.entities.result import DetectionResult, ProcessingResult
 from src.shared.domain.enums.ia_model_type_enum import ModelType
@@ -47,6 +50,8 @@ class IARepository(IARepositoryInterface):
                     results=[],
                     status="error",
                     error_message=response.get("error_message", "Erro desconhecido no processamento"),
+                    request_id=response.get("request_id"),
+                    summary=response.get("summary", {}),
                 )
 
             detection_results = []
@@ -82,7 +87,7 @@ class IARepository(IARepositoryInterface):
 
     async def process_combined(
         self, image: Image, result_upload_url: str, maturation_threshold: float = 0.6
-    ) -> ProcessingResult:
+    ) -> CombinedResult:
         """
         Processa uma imagem com detecção e análise de maturação combinadas.
 
@@ -92,7 +97,7 @@ class IARepository(IARepositoryInterface):
             maturation_threshold: Limiar de confiança para análise de maturação
 
         Returns:
-            ProcessingResult: Resultado do processamento combinado
+            CombinedResult: Resultado do processamento combinado
         """
         try:
             metadata = {
@@ -109,20 +114,10 @@ class IARepository(IARepositoryInterface):
                 metadata=metadata,
             )
 
-            if response.get("status") == "error":
-                logger.error(f"Erro no processamento combinado: {response.get('error_message')}")
-                return ProcessingResult(
-                    image_id=image.image_id,
-                    model_type=ModelType.COMBINED,
-                    results=[],
-                    status="error",
-                    error_message=response.get("error_message", "Erro desconhecido no processamento"),
-                )
-
             detection_results = []
-            for result in response.get("results", []):
+            for result in response.get("detection", {}).get("results", []):
                 detection_results.append(
-                    DetectionResult(
+                    ContractDetectionResult(
                         class_name=result["class_name"],
                         confidence=result["confidence"],
                         bounding_box=result["bounding_box"],
@@ -130,22 +125,51 @@ class IARepository(IARepositoryInterface):
                     )
                 )
 
-            return ProcessingResult(
-                image_id=image.image_id,
-                model_type=ModelType.COMBINED,
-                results=detection_results,
-                status=response.get("status", "success"),
+            summary_data = response.get("detection", {}).get("summary", {})
+            summary = None
+            if summary_data:
+                summary = ContractDetectionSummary(**summary_data)
+
+            processing_metadata = None
+            if response.get("processing_metadata"):
+                processing_metadata = ProcessingMetadata(**response["processing_metadata"])
+
+            status = response.get("status", "success")
+            error_code = response.get("error_code")
+            error_message = response.get("error_message")
+            error_details = response.get("error_details")
+
+            return CombinedResult(
+                status=status,
                 request_id=response.get("request_id"),
-                summary=response.get("summary", {}),
+                detection=ContractDetection(
+                    results=detection_results,
+                    summary=(
+                        summary
+                        if summary
+                        else ContractDetectionSummary(
+                            total_objects=0,
+                            objects_with_maturation=0,
+                            detection_time_ms=0,
+                            maturation_time_ms=0,
+                            average_maturation_score=0.0,
+                            model_versions=None,
+                        )
+                    ),
+                ),
                 image_result_url=response.get("image_result_url"),
+                processing_time_ms=response.get("processing_time_ms", 0),
+                processing_metadata=processing_metadata,
+                error_code=error_code,
+                error_message=error_message,
+                error_details=error_details,
             )
 
         except Exception as e:
             logger.exception(f"Erro ao processar análise combinada: {e}")
-            return ProcessingResult(
-                image_id=image.image_id,
-                model_type=ModelType.COMBINED,
-                results=[],
+            return CombinedResult(
                 status="error",
                 error_message=f"Erro interno: {str(e)}",
+                error_code="PROCESSING_ERROR",
+                error_details={"original_error": str(e)},
             )

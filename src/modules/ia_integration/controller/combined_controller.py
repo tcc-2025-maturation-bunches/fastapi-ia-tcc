@@ -25,31 +25,32 @@ async def process_image_combined(
     combined_usecase: CombinedProcessingUseCase = Depends(get_combined_processing_usecase),
 ):
     try:
-        metadata = None
-        if request.metadata:
-            try:
-                metadata = request.metadata.model_dump()
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Erro ao processar metadados: {str(e)}")
+        metadata = request.metadata if request.metadata else {}
 
-        maturation_threshold = request.maturation_threshold or settings.MIN_DETECTION_CONFIDENCE
+        required_fields = ["user_id", "image_id", "location"]
+        missing_fields = [field for field in required_fields if not metadata.get(field)]
+
+        if missing_fields:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Os seguintes campos são obrigatórios nos metadados: {', '.join(missing_fields)}",
+            )
+        maturation_threshold = metadata.get("maturation_threshold") or settings.MIN_DETECTION_CONFIDENCE
 
         request_id = await combined_usecase.start_processing(
             image_url=str(request.image_url),
-            user_id=request.user_id,
+            result_upload_url=str(request.result_upload_url) if request.result_upload_url else None,
             metadata=metadata,
             maturation_threshold=maturation_threshold,
-            location=request.location,
         )
 
         background_tasks.add_task(
             combined_usecase.execute_in_background,
             request_id=request_id,
             image_url=str(request.image_url),
-            user_id=request.user_id,
+            result_upload_url=str(request.result_upload_url) if request.result_upload_url else None,
             metadata=metadata,
             maturation_threshold=maturation_threshold,
-            location=request.location,
         )
 
         return ProcessingStatusResponse(
@@ -112,7 +113,7 @@ async def get_results_by_request_id(
         result = await combined_usecase.get_result_by_request_id(request_id)
 
         if not result:
-            return None
+            raise HTTPException(status_code=404, detail=f"Resultado para request {request_id} não encontrado")
 
         return ContractResponseMapper.to_contract_response(result)
 
