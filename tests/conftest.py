@@ -1,221 +1,196 @@
 import os
 import sys
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from dotenv import load_dotenv
 from fastapi.testclient import TestClient
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from src.app.main import app
+from src.shared.domain.entities.combined_result import CombinedResult
 from src.shared.domain.entities.image import Image
 from src.shared.domain.entities.result import DetectionResult, ProcessingResult
 from src.shared.domain.enums.ia_model_type_enum import ModelType
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from src.shared.domain.models.base_models import ProcessingMetadata
+from src.shared.domain.models.combined_models import (
+    ContractDetection,
+    ContractDetectionResult,
+    ContractDetectionSummary,
+)
 
 load_dotenv(".env.test")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def client():
+    """Fixture para o cliente de teste da API FastAPI."""
     with TestClient(app) as test_client:
         yield test_client
 
 
 @pytest.fixture
 def mock_s3_client():
+    """Mock para o S3Client de baixo nível, usado nos testes unitários do S3Repository."""
     with patch("src.shared.infra.external.s3.s3_client.S3Client") as mock:
         s3_client_instance = mock.return_value
-
-        # Mock para generate_presigned_url
         s3_client_instance.generate_presigned_url = AsyncMock(
-            return_value={
-                "upload_url": "https://test-bucket.s3.amazonaws.com/test-key?AWSSignature",
-                "key": "test-key",
-                "expires_in_seconds": 900,
-            }
+            return_value={"upload_url": "http://s3-upload.url", "key": "key", "expires_in_seconds": 900}
         )
-
-        # Mock para upload_file
-        s3_client_instance.upload_file = AsyncMock(return_value="https://test-bucket.s3.amazonaws.com/test-key")
-
-        # Mock para get_file_url
-        s3_client_instance.get_file_url = AsyncMock(return_value="https://test-bucket.s3.amazonaws.com/test-key")
-
-        # Mock para delete_file
+        s3_client_instance.upload_file = AsyncMock(return_value="http://s3-file-url")
+        s3_client_instance.get_file_url = AsyncMock(return_value="http://s3-file-url")
         s3_client_instance.delete_file = AsyncMock(return_value=True)
-
         yield s3_client_instance
 
 
 @pytest.fixture
 def mock_dynamo_client():
+    """Mock para o DynamoClient de baixo nível, usado nos testes unitários do DynamoRepository."""
     with patch("src.shared.infra.external.dynamo.dynamo_client.DynamoClient") as mock:
         dynamo_client_instance = mock.return_value
-
-        # Mock para put_item
         dynamo_client_instance.put_item = AsyncMock(return_value={"pk": "IMG#test-id", "sk": "META#test-id"})
-
-        # Mock para get_item
-        dynamo_client_instance.get_item = AsyncMock(
-            return_value={
-                "image_id": "test-id",
-                "image_url": "https://test-bucket.s3.amazonaws.com/test-key",
-                "user_id": "test-user",
-                "metadata": {},
-                "upload_timestamp": datetime.now(timezone.utc).isoformat(),
-            }
-        )
-
-        # Mock para query_items
-        dynamo_client_instance.query_items = AsyncMock(
-            return_value=[
-                {
-                    "image_id": "test-id",
-                    "request_id": "test-request-id",
-                    "model_type": "detection",
-                    "results": [
-                        {
-                            "class_name": "apple",
-                            "confidence": 0.95,
-                            "bounding_box": [0.1, 0.1, 0.2, 0.2],
-                        }
-                    ],
-                    "status": "success",
-                    "processing_timestamp": datetime.now(timezone.utc).isoformat(),
-                    "summary": {"total_objects": 1},
-                    "image_result_url": "https://test-bucket.s3.amazonaws.com/results/test-key",
-                }
-            ]
-        )
-
+        dynamo_client_instance.get_item = AsyncMock(return_value={"image_id": "test-id"})
+        dynamo_client_instance.query_items = AsyncMock(return_value=[{"request_id": "test-req-id"}])
         dynamo_client_instance.convert_from_dynamo_item = MagicMock(side_effect=lambda x: x)
-
         yield dynamo_client_instance
 
 
 @pytest.fixture
-def mock_ec2_client():
+def sample_ec2_combined_response():
+    """Fornece uma resposta mockada do serviço de IA (EC2), baseada no contrato de sucesso."""
+    return {
+        "status": "success",
+        "request_id": "req-combined-9b2f4e",
+        "detection": {
+            "results": [
+                {
+                    "class_name": "banana",
+                    "confidence": 0.95,
+                    "bounding_box": [0.1, 0.1, 0.2, 0.2],
+                    "maturation_level": {
+                        "score": 0.75,
+                        "category": "semi-ripe",
+                        "estimated_days_until_spoilage": 5,
+                        "color_analysis": {"green_ratio": 0.35, "yellow_ratio": 0.55, "brown_ratio": 0.10},
+                    },
+                }
+            ],
+            "summary": {
+                "total_objects": 1,
+                "objects_with_maturation": 1,
+                "detection_time_ms": 320,
+                "maturation_time_ms": 180,
+                "average_maturation_score": 0.75,
+                "model_versions": {"detection": "yolov8-fruit-v2.1", "maturation": "maturation-resnet50-v1.5"},
+            },
+        },
+        "image_result_url": "https://bucket.s3.amazonaws.com/results/fruit_result.jpg",
+        "processing_time_ms": 500,
+        "processing_metadata": {
+            "image_dimensions": {"width": 1920, "height": 1080},
+            "maturation_distribution": {"verde": 0, "madura": 1, "passada": 0, "nao_analisado": 0},
+            "preprocessing_time_ms": 45,
+        },
+    }
+
+
+@pytest.fixture
+def sample_combined_result_entity(sample_ec2_combined_response):
+    """Cria uma instância da entidade CombinedResult a partir da resposta mockada do EC2."""
+    data = sample_ec2_combined_response
+    detection_data = data["detection"]
+    summary_data = detection_data["summary"]
+    metadata_data = data["processing_metadata"]
+    results = [ContractDetectionResult(**res) for res in detection_data["results"]]
+    summary = ContractDetectionSummary(**summary_data)
+    detection = ContractDetection(results=results, summary=summary)
+    processing_metadata = ProcessingMetadata(**metadata_data)
+
+    return CombinedResult(
+        status=data["status"],
+        request_id=data["request_id"],
+        detection=detection,
+        image_result_url=data["image_result_url"],
+        processing_time_ms=data["processing_time_ms"],
+        processing_metadata=processing_metadata,
+    )
+
+
+@pytest.fixture
+def sample_processing_result_combined(sample_ec2_combined_response):
+    """Cria uma instância da entidade ProcessingResult para testes de endpoints legados."""
+    detection_data = sample_ec2_combined_response["detection"]
+    results = [DetectionResult.from_dict(res) for res in detection_data["results"]]
+
+    return ProcessingResult(
+        image_id="img-456",
+        model_type=ModelType.COMBINED,
+        results=results,
+        status=sample_ec2_combined_response["status"],
+        request_id=sample_ec2_combined_response["request_id"],
+        summary=detection_data["summary"],
+        image_result_url=sample_ec2_combined_response["image_result_url"],
+    )
+
+
+@pytest.fixture
+def mock_ec2_client(sample_ec2_combined_response):
+    """Mock para o EC2Client focado no método process_combined."""
     with patch("src.shared.infra.external.ec2.ec2_client.EC2Client") as mock:
         ec2_client_instance = mock.return_value
-
-        # Mock para detect_objects
-        ec2_client_instance.detect_objects = AsyncMock(
-            return_value={
-                "status": "success",
-                "request_id": "test-request-id",
-                "results": [
-                    {
-                        "class_name": "apple",
-                        "confidence": 0.95,
-                        "bounding_box": [0.1, 0.1, 0.2, 0.2],
-                    }
-                ],
-                "summary": {"total_objects": 1, "detection_time_ms": 350},
-                "image_result_url": "https://test-bucket.s3.amazonaws.com/results/test-key",
-            }
-        )
-
-        # Mock para analyze_maturation
-        ec2_client_instance.analyze_maturation = AsyncMock(
-            return_value={
-                "status": "success",
-                "request_id": "test-request-id",
-                "results": [
-                    {
-                        "class_name": "apple",
-                        "confidence": 0.95,
-                        "bounding_box": [0.1, 0.1, 0.2, 0.2],
-                        "maturation_level": {
-                            "score": 0.8,
-                            "category": "ripe",
-                            "estimated_days_until_spoilage": 3,
-                        },
-                    }
-                ],
-                "summary": {"average_maturation_score": 0.8, "detection_time_ms": 450},
-                "image_result_url": "https://test-bucket.s3.amazonaws.com/results/test-key",
-            }
-        )
-
-        # Mock para analyze_maturation_with_boxes
-        ec2_client_instance.analyze_maturation_with_boxes = AsyncMock(
-            return_value={
-                "status": "success",
-                "request_id": "test-maturation-with-boxes-id",
-                "results": [
-                    {
-                        "class_name": "apple",
-                        "confidence": 0.95,
-                        "bounding_box": [0.1, 0.1, 0.2, 0.2],
-                        "maturation_level": {"score": 0.8, "category": "ripe", "estimated_days_until_spoilage": 3},
-                    }
-                ],
-                "summary": {"average_maturation_score": 0.8, "detection_time_ms": 450},
-                "image_result_url": "https://test-bucket.s3.amazonaws.com/results/test-key",
-            }
-        )
-
-        # Mock para _make_request
-        ec2_client_instance._make_request = AsyncMock(
-            return_value={"status": "success", "request_id": "test-request-id"}
-        )
-
+        ec2_client_instance.process_combined = AsyncMock(return_value=sample_ec2_combined_response)
         yield ec2_client_instance
 
 
 @pytest.fixture
-def sample_image():
-    return Image(
-        image_url="https://test-bucket.s3.amazonaws.com/test-key",
-        user_id="test-user",
-        metadata={"original_filename": "test.jpg", "content_type": "image/jpeg"},
-        image_id="test-image-id",
-    )
+def mock_ia_repository(sample_combined_result_entity):
+    """Mock para o IARepository focado no método process_combined."""
+    with patch("src.modules.ia_integration.repo.ia_repository.IARepository") as mock:
+        ia_repo_instance = mock.return_value
+        ia_repo_instance.process_combined = AsyncMock(return_value=sample_combined_result_entity)
+        yield ia_repo_instance
 
 
 @pytest.fixture
-def sample_detection_result():
-    detection_result = DetectionResult(class_name="apple", confidence=0.95, bounding_box=[0.1, 0.1, 0.2, 0.2])
-
-    return ProcessingResult(
-        image_id="test-image-id",
-        model_type=ModelType.DETECTION,
-        results=[detection_result],
-        status="success",
-        request_id="test-request-id",
-        summary={"total_objects": 1, "detection_time_ms": 350},
-        image_result_url="https://test-bucket.s3.amazonaws.com/results/test-key",
-    )
+def mock_s3_repository():
+    """Mock para o S3Repository, usado em testes de use cases."""
+    with patch("src.modules.storage.repo.s3_repository.S3Repository") as mock:
+        s3_repo_instance = mock.return_value
+        s3_repo_instance.generate_image_key = AsyncMock(return_value="test-user/image.jpg")
+        s3_repo_instance.generate_presigned_url = AsyncMock(
+            return_value={"upload_url": "http://s3-upload.url", "image_id": "id-123", "expires_in_seconds": 900}
+        )
+        s3_repo_instance.upload_file = AsyncMock(return_value="http://s3-file-url")
+        s3_repo_instance.upload_image = AsyncMock(
+            return_value=Image(image_id="id-456", image_url="http://image.url", user_id="user1")
+        )
+        s3_repo_instance.generate_result_key = AsyncMock(return_value="test-user/result.jpg")
+        s3_repo_instance.generate_result_presigned_url = AsyncMock(
+            return_value={"upload_url": "http://s3-result-upload.url", "key": "key-result", "expires_in_seconds": 900}
+        )
+        yield s3_repo_instance
 
 
 @pytest.fixture
-def sample_maturation_result():
-    detection_result = DetectionResult(
-        class_name="apple",
-        confidence=0.95,
-        bounding_box=[0.1, 0.1, 0.2, 0.2],
-        maturation_level={
-            "score": 0.8,
-            "category": "ripe",
-            "estimated_days_until_spoilage": 3,
-        },
-    )
-
-    return ProcessingResult(
-        image_id="test-image-id",
-        model_type=ModelType.MATURATION,
-        results=[detection_result],
-        status="success",
-        request_id="test-maturation-id",
-        summary={"average_maturation_score": 0.8, "detection_time_ms": 450},
-        image_result_url="https://test-bucket.s3.amazonaws.com/results/test-key",
-    )
+def mock_dynamo_repository():
+    """Mock para o DynamoRepository, usado em testes de use cases."""
+    with patch("src.modules.storage.repo.dynamo_repository.DynamoRepository") as mock:
+        dynamo_repo_instance = mock.return_value
+        dynamo_repo_instance.save_item = AsyncMock(return_value={})
+        dynamo_repo_instance.get_item = AsyncMock(return_value=None)
+        dynamo_repo_instance.save_request_summary = AsyncMock(return_value={})
+        dynamo_repo_instance.get_combined_result = AsyncMock(return_value=None)
+        dynamo_repo_instance.save_image_metadata = AsyncMock(return_value={})
+        dynamo_repo_instance.save_processing_result = AsyncMock(return_value={})
+        yield dynamo_repo_instance
 
 
 @pytest.fixture
 def sample_upload_file():
+    """Fixture para simular um arquivo de upload (UploadFile do FastAPI)."""
+    from unittest.mock import MagicMock
+
     class MockFile:
         def __init__(self):
             self.file = MagicMock()
@@ -224,255 +199,3 @@ def sample_upload_file():
             self.content_type = "image/jpeg"
 
     return MockFile()
-
-
-@pytest.fixture
-def mock_s3_repository():
-    with patch("src.modules.storage.repo.s3_repository.S3Repository") as mock:
-        s3_repo_instance = mock.return_value
-
-        # Mock para generate_presigned_url
-        s3_repo_instance.generate_presigned_url = AsyncMock(
-            return_value={
-                "upload_url": "https://test-bucket.s3.amazonaws.com/test-key?AWSSignature",
-                "key": "test-key",
-                "expires_in_seconds": 900,
-            }
-        )
-
-        # Mock para generate_image_key
-        s3_repo_instance.generate_image_key = AsyncMock(return_value="test-user/2025/05/12/test-uuid.jpg")
-
-        # Mock para upload_file
-        s3_repo_instance.upload_file = AsyncMock(return_value="https://test-bucket.s3.amazonaws.com/test-key")
-
-        # Mock para upload_result_image
-        s3_repo_instance.upload_result_image = AsyncMock(
-            return_value="https://test-bucket.s3.amazonaws.com/results/test-key"
-        )
-
-        # Mock para get_file_url
-        s3_repo_instance.get_file_url = AsyncMock(return_value="https://test-bucket.s3.amazonaws.com/test-key")
-
-        # Mock para get_result_url
-        s3_repo_instance.get_result_url = AsyncMock(
-            return_value="https://test-bucket.s3.amazonaws.com/results/test-key"
-        )
-
-        # Mock para delete_file
-        s3_repo_instance.delete_file = AsyncMock(return_value=True)
-
-        # Mock para delete_result
-        s3_repo_instance.delete_result = AsyncMock(return_value=True)
-
-        yield s3_repo_instance
-
-
-@pytest.fixture
-def mock_dynamo_repository():
-    with patch("src.modules.storage.repo.dynamo_repository.DynamoRepository") as mock:
-        dynamo_repo_instance = mock.return_value
-
-        # Mock para save_image_metadata
-        dynamo_repo_instance.save_image_metadata = AsyncMock(
-            return_value={
-                "image_id": "test-image-id",
-                "pk": "IMG#test-image-id",
-                "sk": "META#test-image-id",
-            }
-        )
-
-        # Mock para save_processing_result
-        dynamo_repo_instance.save_processing_result = AsyncMock(
-            return_value={
-                "image_id": "test-image-id",
-                "request_id": "test-request-id",
-                "pk": "IMG#test-image-id",
-                "sk": "RESULT#test-request-id",
-            }
-        )
-
-        # Mock para get_image_by_id
-        dynamo_repo_instance.get_image_by_id = AsyncMock(
-            return_value=Image(
-                image_url="https://test-bucket.s3.amazonaws.com/test-key",
-                user_id="test-user",
-                metadata={
-                    "original_filename": "test.jpg",
-                    "content_type": "image/jpeg",
-                },
-                image_id="test-image-id",
-            )
-        )
-
-        async def get_result_by_request_id_side_effect(request_id):
-            if request_id == "test-request-id":
-                return create_sample_detection_result()
-            elif request_id == "test-maturation-id":
-                return create_sample_maturation_result()
-            else:
-                return None
-
-        dynamo_repo_instance.get_result_by_request_id = AsyncMock(side_effect=get_result_by_request_id_side_effect)
-
-        async def get_results_by_image_id_effect(image_id):
-            return [
-                create_sample_detection_result(),
-                create_sample_maturation_result(),
-            ]
-
-        dynamo_repo_instance.get_results_by_image_id = AsyncMock(side_effect=get_results_by_image_id_effect)
-
-        async def get_results_by_user_id_effect(user_id):
-            return [
-                create_sample_detection_result(),
-                create_sample_maturation_result(),
-            ]
-
-        dynamo_repo_instance.get_results_by_user_id = AsyncMock(side_effect=get_results_by_user_id_effect)
-
-        async def get_combined_result_effect(image_id):
-            return create_sample_combined_result()
-
-        dynamo_repo_instance.get_combined_result = AsyncMock(side_effect=get_combined_result_effect)
-
-        dynamo_repo_instance.save_combined_result = AsyncMock(
-            return_value={"combined_id": "test-combined-id", "image_id": "test-image-id"}
-        )
-
-        yield dynamo_repo_instance
-
-
-@pytest.fixture
-def mock_ia_repository():
-    with patch("src.modules.ia_integration.repo.ia_repository.IARepository") as mock:
-        ia_repo_instance = mock.return_value
-
-        async def detect_objects_effect(image):
-            return ProcessingResult(
-                image_id="test-image-id",
-                model_type=ModelType.DETECTION,
-                results=[
-                    DetectionResult(
-                        class_name="banana",
-                        confidence=0.95,
-                        bounding_box=[0.1, 0.1, 0.2, 0.2],
-                    )
-                ],
-                status="success",
-                request_id="test-request-id",
-                summary={"total_objects": 1, "detection_time_ms": 350},
-                image_result_url="https://fruit-analysis.com/results/banana_detection_result.jpg",
-            )
-
-        ia_repo_instance.detect_objects = AsyncMock(side_effect=detect_objects_effect)
-
-        async def analyze_maturation_effect(image):
-            return ProcessingResult(
-                image_id="test-image-id",
-                model_type=ModelType.MATURATION,
-                results=[
-                    DetectionResult(
-                        class_name="apple",
-                        confidence=0.95,
-                        bounding_box=[0.1, 0.1, 0.2, 0.2],
-                        maturation_level={
-                            "score": 0.8,
-                            "category": "ripe",
-                            "estimated_days_until_spoilage": 3,
-                        },
-                    )
-                ],
-                status="success",
-                request_id="test-maturation-id",
-                summary={"average_maturation_score": 0.8, "detection_time_ms": 450},
-                image_result_url="https://test-bucket.s3.amazonaws.com/results/test-key",
-            )
-
-        ia_repo_instance.analyze_maturation = AsyncMock(side_effect=analyze_maturation_effect)
-
-        async def analyze_maturation_with_boxes_effect(image, bounding_boxes, parent_request_id=None):
-            return ProcessingResult(
-                image_id="test-image-id",
-                model_type=ModelType.MATURATION,
-                results=[
-                    DetectionResult(
-                        class_name="apple",
-                        confidence=0.95,
-                        bounding_box=[0.1, 0.1, 0.2, 0.2],
-                        maturation_level={
-                            "score": 0.8,
-                            "category": "ripe",
-                            "estimated_days_until_spoilage": 3,
-                        },
-                    )
-                ],
-                status="success",
-                request_id="test-maturation-boxes-id",
-                summary={"average_maturation_score": 0.8, "detection_time_ms": 450},
-                image_result_url="https://test-bucket.s3.amazonaws.com/results/test-key",
-            )
-
-        ia_repo_instance.analyze_maturation_with_boxes = AsyncMock(side_effect=analyze_maturation_with_boxes_effect)
-
-        yield ia_repo_instance
-
-
-def create_sample_detection_result():
-    detection_result = DetectionResult(class_name="apple", confidence=0.95, bounding_box=[0.1, 0.1, 0.2, 0.2])
-
-    return ProcessingResult(
-        image_id="test-image-id",
-        model_type=ModelType.DETECTION,
-        results=[detection_result],
-        status="success",
-        request_id="test-request-id",
-        summary={"total_objects": 1, "detection_time_ms": 350},
-        image_result_url="https://test-bucket.s3.amazonaws.com/results/test-key",
-    )
-
-
-def create_sample_maturation_result():
-    detection_result = DetectionResult(
-        class_name="apple",
-        confidence=0.95,
-        bounding_box=[0.1, 0.1, 0.2, 0.2],
-        maturation_level={
-            "score": 0.8,
-            "category": "ripe",
-            "estimated_days_until_spoilage": 3,
-        },
-    )
-
-    return ProcessingResult(
-        image_id="test-image-id",
-        model_type=ModelType.MATURATION,
-        results=[detection_result],
-        status="success",
-        request_id="test-maturation-id",
-        summary={"average_maturation_score": 0.8, "detection_time_ms": 450},
-        image_result_url="https://test-bucket.s3.amazonaws.com/results/test-key",
-    )
-
-
-def create_sample_combined_result():
-    from src.shared.domain.entities.combined_result import CombinedResult
-
-    detection_result = create_sample_detection_result()
-    maturation_result = create_sample_maturation_result()
-
-    combined = CombinedResult(
-        image_id="test-image-id",
-        user_id="test-user",
-        detection_result=detection_result,
-        maturation_result=maturation_result,
-        location="test-warehouse",
-    )
-
-    combined.summary = {
-        "total_objects": 1,
-        "average_maturation_score": 0.8,
-        "total_processing_time_ms": combined.total_processing_time_ms,
-    }
-
-    return combined
