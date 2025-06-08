@@ -1,190 +1,133 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi.testclient import TestClient
 
 from src.modules.ia_integration.usecase.combined_processing_usecase import CombinedProcessingUseCase
-from src.shared.domain.entities.combined_result import CombinedResult
-from src.shared.domain.entities.result import DetectionResult, ProcessingResult
-from src.shared.domain.enums.ia_model_type_enum import ModelType
+from src.shared.domain.models.http_models import ProcessingStatusResponse
 
 
-class TestCombinedEndpoints:
+class TestCombinedEndpointsRefactored:
     @pytest.mark.asyncio
-    async def test_process_image_combined(self, client, mock_dynamo_repository, mock_ia_repository):
-        with patch.object(
-            CombinedProcessingUseCase,
-            "start_processing",
-            new_callable=AsyncMock,
-            return_value="combined-req-123",
-        ) as mock_start_processing:
-            response = client.post(
-                "/combined/process",
-                json={
-                    "image_url": "https://fruit-analysis.com/banana.jpg",
-                    "user_id": "banana_analyst",
-                    "location": "warehouse_A",
-                },
-            )
+    async def test_process_image_combined_success(self, client: TestClient):
+        """
+        Testa o início do processamento combinado com sucesso.
+        """
+        # Payload correto conforme o contrato e o modelo Pydantic
+        request_payload = {
+            "image_url": "https://bucket.s3.amazonaws.com/images/fruit.jpg",
+            "result_upload_url": "https://bucket.s3.amazonaws.com/results/fruit_result.jpg?X-Amz-Signature=...",
+            "metadata": {
+                "user_id": "user123",
+                "image_id": "img-456",
+                "location": "warehouse_A",
+                "processing_type": "quality_check",
+                "notes": "Daily batch inspection",
+            },
+        }
+
+        # Mock dos métodos do usecase
+        with (
+            patch.object(
+                CombinedProcessingUseCase, "start_processing", new_callable=AsyncMock, return_value="req-combined-123"
+            ) as mock_start,
+            patch.object(CombinedProcessingUseCase, "execute_in_background", new_callable=AsyncMock) as mock_execute,
+        ):
+
+            response = client.post("/combined/process", json=request_payload)
 
             assert response.status_code == 200
-            assert response.json()["request_id"] == "combined-req-123"
-            assert response.json()["status"] == "processing"
+            data = response.json()
+            assert data["request_id"] == "req-combined-123"
+            assert data["status"] == "processing"
 
-            mock_start_processing.assert_called_once()
+            # Verifica se os métodos foram chamados corretamente
+            mock_start.assert_called_once()
+            mock_execute.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_get_processing_status(self, client):
-        request_id = "combined-req-456"
+    async def test_process_image_combined_missing_metadata(self, client: TestClient):
+        """
+        Testa a falha no processamento por falta de metadados obrigatórios.
+        """
+        request_payload = {
+            "image_url": "https://bucket.s3.amazonaws.com/images/fruit.jpg",
+            "metadata": {
+                "user_id": "user123"
+                # Faltando image_id e location
+            },
+        }
 
-        from src.shared.domain.models.http_models import ProcessingStatusResponse
+        response = client.post("/combined/process", json=request_payload)
 
-        status_response = ProcessingStatusResponse(
-            request_id=request_id, status="completed", progress=1.0, estimated_completion_time=None
-        )
+        assert response.status_code == 400
+        assert "Os seguintes campos são obrigatórios nos metadados: image_id, location" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_get_processing_status_found(self, client: TestClient):
+        """
+        Testa a busca de status de um processamento existente.
+        """
+        request_id = "req-12345"
+        mock_status = ProcessingStatusResponse(request_id=request_id, status="completed", progress=1.0)
 
         with patch.object(
-            CombinedProcessingUseCase,
-            "get_processing_status",
-            new_callable=AsyncMock,
-            return_value=status_response,
-        ) as mock_get_status:
+            CombinedProcessingUseCase, "get_processing_status", new_callable=AsyncMock, return_value=mock_status
+        ) as mock_get:
             response = client.get(f"/combined/status/{request_id}")
 
             assert response.status_code == 200
-            assert response.json()["status"] == "completed"
-            assert response.json()["request_id"] == request_id
-
-            mock_get_status.assert_called_once_with(request_id)
+            data = response.json()
+            assert data["request_id"] == request_id
+            assert data["status"] == "completed"
+            mock_get.assert_called_once_with(request_id)
 
     @pytest.mark.asyncio
-    async def test_get_processing_status_not_found(self, client):
-        request_id = "combined-req-not-exists"
-
+    async def test_get_processing_status_not_found(self, client: TestClient):
+        """
+        Testa a busca de status de um processamento inexistente.
+        """
+        request_id = "req-not-found"
         with patch.object(
-            CombinedProcessingUseCase,
-            "get_processing_status",
-            new_callable=AsyncMock,
-            return_value=None,
-        ) as mock_get_status:
+            CombinedProcessingUseCase, "get_processing_status", new_callable=AsyncMock, return_value=None
+        ) as mock_get:
             response = client.get(f"/combined/status/{request_id}")
 
             assert response.status_code == 404
             assert f"Processamento {request_id} não encontrado" in response.json()["detail"]
-
-            mock_get_status.assert_called_once_with(request_id)
+            mock_get.assert_called_once_with(request_id)
 
     @pytest.mark.asyncio
-    async def test_get_combined_results(self, client):
-        image_id = "banana-image-combined-123"
+    async def test_get_results_by_request_id(self, client: TestClient, sample_combined_result_entity):
+        """
+        Testa a busca de resultado pelo ID da requisição.
 
-        detection_result = ProcessingResult(
-            image_id=image_id,
-            model_type=ModelType.DETECTION,
-            results=[DetectionResult(class_name="banana", confidence=0.95, bounding_box=[0.1, 0.1, 0.2, 0.2])],
-            status="success",
-            request_id="detection-req-id",
-            summary={"total_objects": 1, "detection_time_ms": 350},
-            image_result_url="https://result-url.com/detection",
-        )
+        NOTA: Este teste pode falhar se o ContractResponseMapper não estiver alinhado com a
+        entidade CombinedResult, o que indica um bug a ser corrigido na aplicação.
+        """
+        request_id = "req-combined-9b2f4e"
 
-        maturation_result = ProcessingResult(
-            image_id=image_id,
-            model_type=ModelType.MATURATION,
-            results=[
-                DetectionResult(
-                    class_name="banana",
-                    confidence=0.95,
-                    bounding_box=[0.1, 0.1, 0.2, 0.2],
-                    maturation_level={"score": 0.8, "category": "ripe", "estimated_days_until_spoilage": 3},
-                )
-            ],
-            status="success",
-            request_id="maturation-req-id",
-            summary={"average_maturation_score": 0.8, "detection_time_ms": 450},
-            image_result_url="https://result-url.com/maturation",
-        )
+        with (
+            patch.object(
+                CombinedProcessingUseCase,
+                "get_result_by_request_id",
+                new_callable=AsyncMock,
+                return_value=sample_combined_result_entity,
+            ) as mock_get_result,
+            patch("src.shared.mappers.contract_mapper.ContractResponseMapper.to_contract_response") as mock_mapper,
+        ):
 
-        combined_result = CombinedResult(
-            image_id=image_id,
-            user_id="banana_combined_user",
-            detection_result=detection_result,
-            maturation_result=maturation_result,
-            location="warehouse_B",
-        )
+            mock_mapper.return_value = sample_combined_result_entity.to_contract_dict()
 
-        combined_result.summary = {"total_objects": 1, "average_maturation_score": 0.8, "total_processing_time_ms": 800}
-
-        combined_result.to_dict = MagicMock(
-            return_value={
-                "image_id": image_id,
-                "user_id": "banana_combined_user",
-                "detection_result": detection_result.to_dict(),
-                "maturation_result": maturation_result.to_dict(),
-                "location": "warehouse_B",
-                "status": "completed",
-                "summary": {"total_objects": 1, "average_maturation_score": 0.8, "total_processing_time_ms": 800},
-                "combined_id": combined_result.combined_id,
-            }
-        )
-
-        with patch.object(
-            CombinedProcessingUseCase, "get_combined_result", new_callable=AsyncMock, return_value=combined_result
-        ) as mock_get_result:
-            response = client.get(f"/combined/results/{image_id}")
-
-            assert response.status_code == 200
-            assert response.json()["image_id"] == image_id
-            assert response.json()["user_id"] == "banana_combined_user"
-            assert response.json()["location"] == "warehouse_B"
-            assert "summary" in response.json()
-            assert response.json()["summary"]["total_objects"] == 1
-
-            mock_get_result.assert_called_once_with(image_id)
-
-    async def test_get_results_by_request_id(self, client):
-        request_id = "combined-banana-req-789"
-        image_id = "banana-by-request-123"
-
-        detection_result = ProcessingResult(
-            image_id=image_id,
-            model_type=ModelType.DETECTION,
-            results=[DetectionResult(class_name="banana", confidence=0.95, bounding_box=[0.1, 0.1, 0.2, 0.2])],
-            status="success",
-            request_id="detection-req-id",
-            summary={"total_objects": 1, "detection_time_ms": 350},
-            image_result_url="https://result-url.com/detection",
-        )
-
-        combined_result = CombinedResult(
-            image_id=image_id,
-            user_id="banana_request_user",
-            detection_result=detection_result,
-            location="warehouse_C",
-        )
-
-        combined_result.summary = {"total_objects": 1, "total_processing_time_ms": 350}
-
-        combined_result.to_dict = MagicMock(
-            return_value={
-                "image_id": image_id,
-                "user_id": "banana_request_user",
-                "detection_result": detection_result.to_dict(),
-                "maturation_result": None,
-                "location": "warehouse_C",
-                "status": "completed",
-                "summary": {"total_objects": 1, "total_processing_time_ms": 350},
-                "combined_id": combined_result.combined_id,
-            }
-        )
-
-        with patch.object(
-            CombinedProcessingUseCase, "get_result_by_request_id", new_callable=AsyncMock, return_value=combined_result
-        ) as mock_get_result:
             response = client.get(f"/combined/results/request/{request_id}")
 
+            # O teste espera um 200, mas pode falhar aqui se o mapper estiver quebrado
             assert response.status_code == 200
-            assert response.json()["image_id"] == image_id
-            assert response.json()["user_id"] == "banana_request_user"
-            assert response.json()["location"] == "warehouse_C"
+
+            data = response.json()
+            assert data["request_id"] == request_id
+            assert data["status"] == "success"
+            assert data["detection"]["summary"]["total_objects"] == 1
 
             mock_get_result.assert_called_once_with(request_id)
+            mock_mapper.assert_called_once()

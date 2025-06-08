@@ -85,7 +85,7 @@ class TestDetectionResultEntity:
 class TestProcessingResultEntity:
     def test_processing_result_creation(self):
         image_id = "banana-batch-123-img"
-        model_type = ModelType.DETECTION
+        model_type = ModelType.COMBINED
         results = [DetectionResult(class_name="banana", confidence=0.95, bounding_box=[0.1, 0.2, 0.3, 0.4])]
 
         processing_result = ProcessingResult(image_id=image_id, model_type=model_type, results=results)
@@ -102,7 +102,7 @@ class TestProcessingResultEntity:
 
     def test_processing_result_with_custom_values(self):
         image_id = "banana-ripeness-check-456"
-        model_type = ModelType.MATURATION
+        model_type = ModelType.COMBINED
         results = [
             DetectionResult(
                 class_name="banana",
@@ -146,7 +146,7 @@ class TestProcessingResultEntity:
 
     def test_processing_result_to_dict(self):
         image_id = "banana-shipment-567"
-        model_type = ModelType.MATURATION
+        model_type = ModelType.COMBINED
         results = [
             DetectionResult(
                 class_name="banana",
@@ -190,7 +190,7 @@ class TestProcessingResultEntity:
     def test_processing_result_from_dict(self):
         result_dict = {
             "image_id": "banana-crate-inspection-654",
-            "model_type": "maturation",
+            "model_type": "combined",
             "results": [
                 {
                     "class_name": "banana",
@@ -213,7 +213,7 @@ class TestProcessingResultEntity:
         processing_result = ProcessingResult.from_dict(result_dict)
 
         assert processing_result.image_id == "banana-crate-inspection-654"
-        assert processing_result.model_type == ModelType.MATURATION
+        assert processing_result.model_type == ModelType.COMBINED
         assert len(processing_result.results) == 1
         assert processing_result.results[0].class_name == "banana"
         assert processing_result.results[0].confidence == 0.96

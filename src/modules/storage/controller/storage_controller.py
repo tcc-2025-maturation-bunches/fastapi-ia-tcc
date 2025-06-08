@@ -43,6 +43,30 @@ async def generate_presigned_url(
         raise HTTPException(status_code=500, detail=f"Erro ao gerar URL pré-assinada: {str(e)}")
 
 
+@storage_router.post("/presigned-result-url", response_model=PresignedUrlResponse)
+async def generate_presigned_result_url(
+    request: PresignedUrlRequest,
+    image_upload_usecase: ImageUploadUseCase = Depends(get_image_upload_usecase),
+):
+    """Gera uma URL pré-assinada para upload de resultados de processamento."""
+    try:
+        presigned_url_data = await image_upload_usecase.generate_result_presigned_url(
+            filename=request.filename,
+            content_type=request.content_type,
+            user_id=request.user_id,
+        )
+
+        return PresignedUrlResponse(
+            upload_url=presigned_url_data["upload_url"],
+            image_id=presigned_url_data["result_id"],
+            expires_in_seconds=presigned_url_data["expires_in_seconds"],
+        )
+
+    except Exception as e:
+        logger.exception(f"Erro ao gerar URL pré-assinada para resultado: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar URL pré-assinada para resultado: {str(e)}")
+
+
 @storage_router.post("/upload", response_model=dict)
 async def upload_image(
     file: UploadFile = File(...),

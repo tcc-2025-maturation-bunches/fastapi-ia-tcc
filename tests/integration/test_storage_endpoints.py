@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 from src.modules.storage.usecase.get_result_usecase import GetResultUseCase
 from src.modules.storage.usecase.image_upload_usecase import ImageUploadUseCase
+from src.shared.domain.entities.image import Image
 
 
 class TestStorageEndpoints:
@@ -36,8 +37,6 @@ class TestStorageEndpoints:
             "message": "Imagem enviada com sucesso",
         }
 
-        from src.shared.domain.entities.image import Image
-
         mock_image = Image(
             image_url=mock_response["image_url"], user_id="banana_upload_user", image_id=mock_response["image_id"]
         )
@@ -55,21 +54,25 @@ class TestStorageEndpoints:
             assert response_json["image_url"] == mock_response["image_url"]
             assert response_json["message"] == mock_response["message"]
 
-    def test_get_result_by_request_id(self, client, sample_detection_result):
-        request_id = "test-request-id"
+    def test_get_result_by_request_id(self, client, sample_processing_result_combined):
+        request_id = sample_processing_result_combined.request_id
 
         with patch.object(
-            GetResultUseCase, "get_by_request_id", new_callable=AsyncMock, return_value=sample_detection_result
+            GetResultUseCase,
+            "get_by_request_id",
+            new_callable=AsyncMock,
+            return_value=sample_processing_result_combined,
         ):
             response = client.get(f"/storage/results/request/{request_id}")
 
             assert response.status_code == 200
             response_json = response.json()
             assert response_json["request_id"] == request_id
-            assert response_json["image_id"] == sample_detection_result.image_id
-            assert response_json["model_type"] == sample_detection_result.model_type.value
+            assert response_json["image_id"] == sample_processing_result_combined.image_id
+            assert response_json["model_type"] == sample_processing_result_combined.model_type.value
             assert len(response_json["results"]) == 1
-            assert response_json["results"][0]["class_name"] == "apple"
+            assert response_json["results"][0]["class_name"] == "banana"
+            assert response_json["results"][0]["maturation_level"] is not None
 
     def test_get_result_by_request_id_not_found(self, client):
         request_id = "non-existent-request-id"
@@ -78,28 +81,24 @@ class TestStorageEndpoints:
             response = client.get(f"/storage/results/request/{request_id}")
 
             assert response.status_code == 404
-            response_json = response.json()
-            assert "detail" in response_json
-            assert request_id in response_json["detail"]
+            assert request_id in response.json()["detail"]
 
-    def test_get_results_by_image_id(self, client, sample_detection_result, sample_maturation_result):
-        image_id = "test-image-id"
+    def test_get_results_by_image_id(self, client, sample_processing_result_combined):
+        image_id = sample_processing_result_combined.image_id
 
         with patch.object(
             GetResultUseCase,
             "get_by_image_id",
             new_callable=AsyncMock,
-            return_value=[sample_detection_result, sample_maturation_result],
+            return_value=[sample_processing_result_combined],
         ):
             response = client.get(f"/storage/results/image/{image_id}")
             assert response.status_code == 200
             response_json = response.json()
             assert isinstance(response_json, list)
-            assert len(response_json) == 2
-            assert response_json[0]["model_type"] == "detection"
-            assert response_json[1]["model_type"] == "maturation"
+            assert len(response_json) == 1
+            assert response_json[0]["model_type"] == "combined"
             assert response_json[0]["image_id"] == image_id
-            assert response_json[1]["image_id"] == image_id
 
     def test_get_results_by_image_id_not_found(self, client):
         image_id = "non-existent-image-id"
@@ -107,34 +106,30 @@ class TestStorageEndpoints:
             response = client.get(f"/storage/results/image/{image_id}")
 
             assert response.status_code == 404
-            response_json = response.json()
-            assert "detail" in response_json
-            assert image_id in response_json["detail"]
+            assert image_id in response.json()["detail"]
 
-    def test_get_results_by_user_id(self, client, sample_detection_result, sample_maturation_result):
+    def test_get_results_by_user_id(self, client, sample_processing_result_combined):
         user_id = "banana_results_user"
 
         with patch.object(
             GetResultUseCase,
             "get_by_user_id",
             new_callable=AsyncMock,
-            return_value=[sample_detection_result, sample_maturation_result],
+            return_value=[sample_processing_result_combined],
         ):
             response = client.get(f"/storage/results/user/{user_id}")
 
             assert response.status_code == 200
             response_json = response.json()
             assert isinstance(response_json, list)
-            assert len(response_json) == 2
-            assert response_json[0]["model_type"] == "detection"
-            assert response_json[1]["model_type"] == "maturation"
+            assert len(response_json) == 1
+            assert response_json[0]["model_type"] == "combined"
 
     def test_get_results_by_user_id_not_found(self, client):
         user_id = "non-existent-user-id"
 
         with patch.object(GetResultUseCase, "get_by_user_id", new_callable=AsyncMock, return_value=[]):
             response = client.get(f"/storage/results/user/{user_id}")
+
             assert response.status_code == 404
-            response_json = response.json()
-            assert "detail" in response_json
-            assert user_id in response_json["detail"]
+            assert user_id in response.json()["detail"]

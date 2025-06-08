@@ -27,8 +27,8 @@ class S3Repository(S3RepositoryInterface):
             results_bucket: Nome do bucket para armazenar resultados do processamento
             region: Região da AWS. Se não fornecida, usa a configuração padrão.
         """
-        self.images_bucket = images_bucket
-        self.results_bucket = results_bucket
+        self.images_bucket = settings.S3_IMAGES_BUCKET or images_bucket
+        self.results_bucket = settings.S3_RESULTS_BUCKET or results_bucket
         self.region = region or settings.AWS_REGION
 
         self.images_client = S3Client(bucket_name=images_bucket, region=self.region)
@@ -53,6 +53,23 @@ class S3Repository(S3RepositoryInterface):
         logger.info(f"Gerando URL pré-assinada para upload de imagem: {key}")
         return await self.images_client.generate_presigned_url(key, content_type, expires_in)
 
+    async def generate_result_presigned_url(
+        self, key: str, content_type: str, expires_in: timedelta = timedelta(minutes=15)
+    ) -> Dict[str, Any]:
+        """
+        Gera uma URL pré-assinada para upload direto para o bucket de resultados.
+
+        Args:
+            key: Caminho do objeto no bucket
+            content_type: Tipo de conteúdo do arquivo
+            expires_in: Tempo de expiração da URL
+
+        Returns:
+            Dict: Dados da URL pré-assinada
+        """
+        logger.info(f"Gerando URL pré-assinada para upload de resultado: {key}")
+        return await self.results_client.generate_presigned_url(key, content_type, expires_in)
+
     async def generate_image_key(self, original_filename: str, user_id: str) -> str:
         """
         Gera uma chave única para a imagem no S3.
@@ -73,6 +90,27 @@ class S3Repository(S3RepositoryInterface):
 
         now = datetime.now(timezone.utc)
         return f"{user_id}/{now.year}/{now.month:02d}/{now.day:02d}/{unique_id}.{ext}"
+
+    async def generate_result_key(self, original_filename: str, user_id: str) -> str:
+        """
+        Gera uma chave única para o resultado no S3.
+
+        Args:
+            original_filename: Nome original do arquivo
+            user_id: ID do usuário
+
+        Returns:
+            str: Chave gerada
+        """
+        if "." in original_filename:
+            ext = original_filename.split(".")[-1]
+        else:
+            ext = "jpg"
+
+        unique_id = str(uuid.uuid4())
+
+        now = datetime.now(timezone.utc)
+        return f"{user_id}/{now.year}/{now.month:02d}/{now.day:02d}/{unique_id}_result.{ext}"
 
     async def upload_file(
         self,

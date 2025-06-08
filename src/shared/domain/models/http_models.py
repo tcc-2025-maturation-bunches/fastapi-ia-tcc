@@ -1,3 +1,4 @@
+# src/shared/domain/models/http_models.py
 from datetime import datetime
 from typing import List, Optional
 
@@ -12,40 +13,58 @@ from src.shared.domain.models.base_models import (
     ProcessingSummary,
 )
 from src.shared.domain.models.combined_models import (
+    CombinedContractResponse,
     CombinedProcessingRequest,
-    CombinedProcessingResponse,
     ProcessingConfig,
 )
-from src.shared.domain.models.monitoring_models import (
-    CaptureResultResponse,
-    CaptureUpdateRequest,
-    MonitoringMetadata,
-    MonitoringSessionRequest,
-    MonitoringSessionResponse,
-    WebSocketConfigRequest,
+from src.shared.domain.models.device_models import (
+    BulkDeviceAction,
+    DeviceActivityResponse,
+    DeviceAlertRequest,
+    DeviceCaptureHistory,
+    DeviceConfigUpdate,
+    DeviceDashboardResponse,
+    DeviceMaintenanceRequest,
+    DeviceRegistrationRequest,
+    DeviceResponse,
+    DeviceSetupResponse,
+    DeviceStatsResponse,
+    DeviceStatusUpdate,
+    GlobalConfigRequest,
+    ImageUploadProcessRequest,
+    ProcessingJobResponse,
 )
 from src.shared.domain.models.status_models import HealthCheckResponse, ServiceStatusResponse
 
 __all__ = [
     "ImageMetadata",
-    "ProcessImageRequest",
     "BoundingBox",
     "MaturationInfo",
     "DetectionInfo",
     "ProcessingSummary",
+    "ProcessImageRequest",
     "ProcessingResponse",
     "PresignedUrlRequest",
     "PresignedUrlResponse",
     "ProcessingStatusResponse",
-    "MonitoringSessionRequest",
-    "MonitoringSessionResponse",
-    "CaptureResultResponse",
-    "CaptureUpdateRequest",
-    "WebSocketConfigRequest",
-    "MonitoringMetadata",
     "CombinedProcessingRequest",
-    "CombinedProcessingResponse",
+    "CombinedContractResponse",
     "ProcessingConfig",
+    "DeviceRegistrationRequest",
+    "DeviceResponse",
+    "DeviceStatusUpdate",
+    "DeviceConfigUpdate",
+    "ImageUploadProcessRequest",
+    "ProcessingJobResponse",
+    "DeviceStatsResponse",
+    "DeviceCaptureHistory",
+    "GlobalConfigRequest",
+    "DeviceSetupResponse",
+    "DeviceDashboardResponse",
+    "DeviceActivityResponse",
+    "DeviceAlertRequest",
+    "DeviceMaintenanceRequest",
+    "BulkDeviceAction",
     "HealthCheckResponse",
     "ServiceStatusResponse",
 ]
