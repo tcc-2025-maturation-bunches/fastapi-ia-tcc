@@ -84,11 +84,10 @@ class ImageDimensions(BaseModel):
 
 
 class MaturationDistribution(BaseModel):
-    unripe: int
-    semi_ripe: int = Field(alias="semi-ripe")
-    ripe: int
-    overripe: int
-    not_analyzed: int
+    verde: int
+    madura: int
+    passada: int
+    nao_analisado: int
 
 
 class ProcessingMetadata(BaseModel):
