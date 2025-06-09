@@ -18,8 +18,8 @@ class RequestSummaryMapper:
         detection_result_dict = detection_data.model_dump(exclude_none=True) if detection_data else {}
 
         item = {
-            "PK": f"USER#{user_id}",
-            "SK": f"REQUEST#{now}#{request_id}",
+            "pk": f"USER#{user_id}",
+            "sk": f"REQUEST#{now}#{request_id}",
             "request_id": request_id,
             "image_id": initial_metadata.get("image_id"),
             "user_id": user_id,

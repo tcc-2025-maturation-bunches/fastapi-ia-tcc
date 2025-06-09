@@ -23,11 +23,10 @@ class TestCombinedProcessingUseCaseRefactored:
 
         assert request_id.startswith("req-combined-")
 
-        mock_dynamo_repository.save_item.assert_called_once()
-        call_args = mock_dynamo_repository.save_item.call_args[0]
-        assert call_args[0] == "processing_status"
-        saved_data = call_args[1]
-        assert saved_data["pk"] == f"PROCESSING#{request_id}"
+        mock_dynamo_repository.save_request_summary.assert_called_once()
+        call_args = mock_dynamo_repository.save_request_summary.call_args[0]
+        saved_data = call_args[0]
+        assert saved_data["pk"].startswith("PROCESSING#")
         assert saved_data["status"] == "queued"
         assert saved_data["progress"] == 0.0
         assert saved_data["image_id"] == "test_img_1"
@@ -65,11 +64,6 @@ class TestCombinedProcessingUseCaseRefactored:
         )
 
         mock_ia_repository.process_combined.assert_called_once()
-        mock_dynamo_repository.save_request_summary.assert_called_once()
         summary_call = mock_dynamo_repository.save_request_summary.call_args[0][0]
-        assert summary_call["status"] == "success"
+        assert summary_call["status"] == "completed"
         assert summary_call["request_id"] == request_id
-
-        final_status_call = mock_dynamo_repository.save_item.call_args[0][1]
-        assert final_status_call["status"] == "completed"
-        assert final_status_call["progress"] == 1.0

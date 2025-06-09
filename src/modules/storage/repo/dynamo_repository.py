@@ -112,13 +112,17 @@ class DynamoRepository(DynamoRepositoryInterface):
         except Exception as e:
             logger.exception(f"Erro ao recuperar resultados por user_id do DynamoDB: {e}")
 
-    async def save_combined_result(self, combined_result: CombinedResult) -> Dict[str, Any]:
+    async def save_combined_result(self, image_id: str, combined_result: CombinedResult) -> Dict[str, Any]:
         try:
-            item = combined_result.to_dict()
+            item = combined_result.to_contract_dict()
 
-            logger.info(f"Salvando resultado combinado para imagem {combined_result.image_id} no DynamoDB")
+            item["pk"] = f"IMG#{image_id}"
+            item["sk"] = "RESULT#COMBINED"
+            item["entity_type"] = "COMBINED_RESULT"
+            item["image_id"] = image_id
+
+            logger.info(f"Salvando resultado combinado para imagem {image_id} no DynamoDB")
             return await self.dynamo_client.put_item(item)
-
         except Exception as e:
             logger.exception(f"Erro ao salvar resultado combinado no DynamoDB: {e}")
             raise
@@ -145,4 +149,12 @@ class DynamoRepository(DynamoRepositoryInterface):
             return await self.dynamo_client.put_item(item)
         except Exception as e:
             logger.exception(f"Erro ao salvar resumo da requisição no DynamoDB: {e}")
+            raise
+
+    async def get_item(self, key: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        try:
+            logger.info(f"Recuperando item do DynamoDB: Key={key}")
+            return await self.dynamo_client.get_item(key)
+        except Exception as e:
+            logger.exception(f"Erro ao recuperar item por chave: {e}")
             raise

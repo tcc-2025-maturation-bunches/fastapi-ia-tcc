@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import boto3
@@ -10,6 +11,18 @@ from src.app.config import settings
 logger = logging.getLogger(__name__)
 
 
+def floats_to_decimals(obj: Any) -> Any:
+    if isinstance(obj, list):
+        return [floats_to_decimals(i) for i in obj]
+    if isinstance(obj, dict):
+        return {k: floats_to_decimals(v) for k, v in obj.items()}
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    return obj
+
+
 class DynamoClient:
     def __init__(self, table_name: Optional[str] = None, region: Optional[str] = None):
         self.table_name = table_name or settings.DYNAMODB_TABLE_NAME
@@ -17,17 +30,6 @@ class DynamoClient:
         self.client = boto3.resource("dynamodb", region_name=self.region)
         self.table = self.client.Table(self.table_name)
         logger.info(f"Inicializando cliente DynamoDB para tabela {self.table_name}")
-
-    def convert_to_dynamo_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
-        dynamo_item = {}
-        for key, value in item.items():
-            if isinstance(value, datetime):
-                dynamo_item[key] = value.isoformat()
-            elif isinstance(value, (dict, list)):
-                dynamo_item[key] = json.dumps(value)
-            else:
-                dynamo_item[key] = value
-        return dynamo_item
 
     def convert_from_dynamo_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
         if not item:
@@ -50,24 +52,25 @@ class DynamoClient:
         return result
 
     async def put_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
-        dynamo_item = self.convert_to_dynamo_item(item)
+        dynamo_item = floats_to_decimals(item)
 
         try:
             self.table.put_item(Item=dynamo_item)
-            logger.info(f"Item inserido com sucesso: {item.get('image_id') or item.get('request_id')}")
+            pk_value = dynamo_item.get("PK") or dynamo_item.get("pk")
+            logger.info(f"Item inserido com sucesso: pk={pk_value}")
             return dynamo_item
         except Exception as e:
             logger.error(f"Erro ao inserir item no DynamoDB: {e}")
             raise
 
-    async def get_item(self, table_name: str, key: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def get_item(self, key: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         try:
-            response = await self.dynamo_client.get_item(TableName=table_name, Key=key)
+            response = self.table.get_item(Key=key)
 
             if "Item" not in response:
                 return None
 
-            return self.dynamo_client.convert_from_dynamo_item(response["Item"])
+            return self.convert_from_dynamo_item(response["Item"])
         except Exception as e:
             logger.exception(f"Erro ao recuperar item do DynamoDB: {e}")
             return None

@@ -87,3 +87,32 @@ class CombinedResult:
             error_message=error_message,
             error_details=error_details,
         )
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "CombinedResult":
+        detection_data = data.get("detection_result", {})
+        detection = None
+        if detection_data and detection_data.get("summary"):
+            summary_data = detection_data.get("summary", {})
+            if "model_versions" not in summary_data:
+                summary_data["model_versions"] = {}
+            summary = ContractDetectionSummary(**summary_data)
+
+            results_data = detection_data.get("results", [])
+            results = [ContractDetectionResult(**res) for res in results_data]
+            detection = ContractDetection(results=results, summary=summary)
+
+        processing_metadata_data = data.get("processing_metadata")
+        processing_metadata = ProcessingMetadata(**processing_metadata_data) if processing_metadata_data else None
+
+        return cls(
+            status=data.get("status", "unknown"),
+            request_id=data.get("request_id"),
+            detection=detection,
+            image_result_url=data.get("image_result_url"),
+            processing_time_ms=data.get("processing_time_ms", 0),
+            processing_metadata=processing_metadata,
+            error_code=data.get("error_info", {}).get("error_code"),
+            error_message=data.get("error_info", {}).get("error_message"),
+            error_details=data.get("error_info", {}).get("error_details"),
+        )

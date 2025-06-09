@@ -158,7 +158,7 @@ class CombinedProcessingUseCase:
                 maturation_threshold=maturation_threshold,
             )
 
-            await self.dynamo_repository.save_combined_result(combined_result)
+            await self.dynamo_repository.save_combined_result(user_id, combined_result)
             return combined_result
 
         except Exception as e:
@@ -181,16 +181,23 @@ class CombinedProcessingUseCase:
             raise
 
     async def get_result_by_request_id(self, request_id: str) -> Optional[CombinedResult]:
-        """Recupera resultado combinado por request_id."""
-        status_data = await self._get_processing_status_data(request_id)
-        if not status_data or status_data.get("status") != "completed":
-            return None
+        try:
+            status_data = await self._get_processing_status_data(request_id)
+            if not status_data or status_data.get("status") != "completed":
+                return None
 
-        image_id = status_data.get("image_id")
-        if image_id:
-            return await self.get_combined_result(image_id)
+            items = await self.dynamo_repository.query_items(
+                key_name="request_id", key_value=request_id, index_name="RequestIdIndex"
+            )
 
-        return None
+            if not items:
+                return None
+
+            return CombinedResult.from_dict(items[0])
+
+        except Exception as e:
+            logger.exception(f"Erro ao buscar resultado por request_id: {e}")
+            raise
 
     async def get_processing_status(self, request_id: str) -> Optional[ProcessingStatusResponse]:
         """Recupera status do processamento."""
@@ -213,7 +220,7 @@ class CombinedProcessingUseCase:
             status_data["request_id"] = request_id
             status_data["ttl"] = int((datetime.now(timezone.utc).timestamp() + 86400))
 
-            await self.dynamo_repository.save_item("processing_status", status_data)
+            await self.dynamo_repository.save_request_summary(status_data)
         except Exception as e:
             logger.exception(f"Erro ao salvar status de processamento para {request_id}: {e}")
             raise
@@ -222,7 +229,7 @@ class CombinedProcessingUseCase:
         """Recupera o status de processamento do DynamoDB."""
         try:
             key = {"pk": f"PROCESSING#{request_id}", "sk": "STATUS"}
-            return await self.dynamo_repository.get_item("processing_status", key)
+            return await self.dynamo_repository.get_item(key)
         except Exception as e:
             logger.exception(f"Erro ao recuperar status de processamento para {request_id}: {e}")
             return None
