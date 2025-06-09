@@ -40,6 +40,7 @@ async def process_image_combined(
         request_id = await combined_usecase.start_processing(
             image_url=str(request.image_url),
             result_upload_url=str(request.result_upload_url) if request.result_upload_url else None,
+            user_id=metadata.get("user_id"),
             metadata=metadata,
             maturation_threshold=maturation_threshold,
         )

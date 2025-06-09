@@ -177,7 +177,6 @@ def mock_dynamo_repository():
     """Mock para o DynamoRepository, usado em testes de use cases."""
     with patch("src.modules.storage.repo.dynamo_repository.DynamoRepository") as mock:
         dynamo_repo_instance = mock.return_value
-        dynamo_repo_instance.save_item = AsyncMock(return_value={})
         dynamo_repo_instance.get_item = AsyncMock(return_value=None)
         dynamo_repo_instance.save_request_summary = AsyncMock(return_value={})
         dynamo_repo_instance.get_combined_result = AsyncMock(return_value=None)

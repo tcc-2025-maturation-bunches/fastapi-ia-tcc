@@ -23,8 +23,8 @@ class TestCombinedProcessingUseCaseRefactored:
 
         assert request_id.startswith("req-combined-")
 
-        mock_dynamo_repository.save_item.assert_called_once()
-        call_args = mock_dynamo_repository.save_item.call_args[0]
+        mock_dynamo_repository.save_request_summary.assert_called_once()
+        call_args = mock_dynamo_repository.save_request_summary.call_args[0]
         assert call_args[0] == "processing_status"
         saved_data = call_args[1]
         assert saved_data["pk"] == f"PROCESSING#{request_id}"
@@ -70,6 +70,6 @@ class TestCombinedProcessingUseCaseRefactored:
         assert summary_call["status"] == "success"
         assert summary_call["request_id"] == request_id
 
-        final_status_call = mock_dynamo_repository.save_item.call_args[0][1]
+        final_status_call = mock_dynamo_repository.save_request_summary.call_args[0][1]
         assert final_status_call["status"] == "completed"
         assert final_status_call["progress"] == 1.0
