@@ -51,7 +51,6 @@ class TestCombinedProcessingUseCaseRefactored:
 
         mock_dynamo_repository.get_item = AsyncMock(return_value=initial_status)
         mock_ia_repository.process_combined = AsyncMock(return_value=sample_combined_result_entity)
-        mock_dynamo_repository.save_item = AsyncMock()
 
         usecase = CombinedProcessingUseCase(
             ia_repository=mock_ia_repository, dynamo_repository=mock_dynamo_repository, s3_repository=mock_s3_repository

@@ -11,13 +11,19 @@ from src.app.config import settings
 logger = logging.getLogger(__name__)
 
 
-def floats_to_decimals(obj: Any) -> Any:
+def floats_to_decimals(obj: Any, *, _is_root: bool = True) -> Any:
     if isinstance(obj, list):
-        return [floats_to_decimals(i) for i in obj]
+        if not _is_root:
+            return json.dumps([floats_to_decimals(i, _is_root=False) for i in obj])
+        return [floats_to_decimals(i, _is_root=False) for i in obj]
     if isinstance(obj, dict):
-        return {k: floats_to_decimals(v) for k, v in obj.items()}
+        if not _is_root:
+            return json.dumps({k: floats_to_decimals(v, _is_root=False) for k, v in obj.items()})
+        return {k: floats_to_decimals(v, _is_root=False) for k, v in obj.items()}
     if isinstance(obj, float):
         return Decimal(str(obj))
+    if isinstance(obj, datetime):
+        return obj.isoformat()
     return obj
 
 

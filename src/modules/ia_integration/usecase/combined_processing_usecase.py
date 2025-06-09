@@ -104,10 +104,6 @@ class CombinedProcessingUseCase:
             full_metadata["image_url"] = image_url
             full_metadata["image_id"] = image.image_id
 
-            full_metadata = metadata or {}
-            full_metadata["image_url"] = image_url
-            full_metadata["image_id"] = image.image_id
-
             final_item = RequestSummaryMapper.to_dynamo_item(
                 user_id=user_id, request_id=request_id, initial_metadata=full_metadata, combined_result=combined_result
             )
@@ -162,7 +158,7 @@ class CombinedProcessingUseCase:
                 maturation_threshold=maturation_threshold,
             )
 
-            await self.dynamo_repository.save_combined_result(combined_result)
+            await self.dynamo_repository.save_combined_result(user_id, combined_result)
             return combined_result
 
         except Exception as e:
