@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Dict, List, Optional
 
+from app.config import Settings
 from src.shared.domain.entities.combined_result import CombinedResult
 from src.shared.domain.entities.image import Image
 from src.shared.domain.entities.result import ProcessingResult
@@ -15,6 +16,8 @@ class DynamoRepository(DynamoRepositoryInterface):
 
     def __init__(self, dynamo_client: Optional[DynamoClient] = None):
         self.dynamo_client = dynamo_client or DynamoClient()
+        self.devices_client = DynamoClient(table_name=Settings.DYNAMODB_DEVICES_TABLE)
+        self.activities_client = DynamoClient(table_name=Settings.DYNAMODB_DEVICE_ACTIVITIES_TABLE)
 
     async def save_image_metadata(self, image: Image) -> Dict[str, Any]:
         try:

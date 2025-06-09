@@ -1,4 +1,5 @@
 # src/app/config.py - VERSÃO ATUALIZADA
+import logging
 import os
 from typing import Any, Dict
 
@@ -7,6 +8,7 @@ class Settings:
     """Classe de configurações da aplicação."""
 
     def __init__(self):
+        self.logger = logging.getLogger(__name__)
         # Variáveis de ambiente básicas
         self.ENVIRONMENT = os.getenv("ENVIRONMENT", "dev")
         self.DEBUG = os.getenv("DEBUG", "True").lower() == "true"
@@ -87,9 +89,9 @@ class Settings:
                                 os.environ[key] = value
                 # Recarregar as configurações após carregar as variáveis de ambiente
                 self.__init__()
-                print(f"Variáveis de ambiente carregadas de {env_file}")
+                self.logger.info(f"Variáveis de ambiente carregadas de {env_file}")
         except Exception as e:
-            print(f"Erro ao carregar arquivo .env: {e}")
+            self.logger.error(f"Erro ao carregar arquivo .env: {e}")
 
     def get_all_settings(self) -> Dict[str, Any]:
         """
