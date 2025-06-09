@@ -1,7 +1,7 @@
-from decimal import Decimal
 import json
 import logging
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import boto3
@@ -9,6 +9,7 @@ import boto3
 from src.app.config import settings
 
 logger = logging.getLogger(__name__)
+
 
 def floats_to_decimals(obj: Any) -> Any:
     if isinstance(obj, list):
@@ -18,6 +19,7 @@ def floats_to_decimals(obj: Any) -> Any:
     if isinstance(obj, float):
         return Decimal(str(obj))
     return obj
+
 
 class DynamoClient:
     def __init__(self, table_name: Optional[str] = None, region: Optional[str] = None):

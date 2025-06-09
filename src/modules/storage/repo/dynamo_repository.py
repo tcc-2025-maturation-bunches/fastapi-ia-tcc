@@ -115,7 +115,7 @@ class DynamoRepository(DynamoRepositoryInterface):
     async def save_combined_result(self, image_id: str, combined_result: CombinedResult) -> Dict[str, Any]:
         try:
             item = combined_result.to_contract_dict()
-            
+
             item["pk"] = f"IMG#{image_id}"
             item["sk"] = "RESULT#COMBINED"
             item["entity_type"] = "COMBINED_RESULT"
@@ -150,7 +150,7 @@ class DynamoRepository(DynamoRepositoryInterface):
         except Exception as e:
             logger.exception(f"Erro ao salvar resumo da requisição no DynamoDB: {e}")
             raise
-        
+
     async def get_item(self, key: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         try:
             logger.info(f"Recuperando item do DynamoDB: Key={key}")

@@ -97,11 +97,11 @@ class CombinedResult:
             if "model_versions" not in summary_data:
                 summary_data["model_versions"] = {}
             summary = ContractDetectionSummary(**summary_data)
-            
+
             results_data = detection_data.get("results", [])
             results = [ContractDetectionResult(**res) for res in results_data]
             detection = ContractDetection(results=results, summary=summary)
-        
+
         processing_metadata_data = data.get("processing_metadata")
         processing_metadata = ProcessingMetadata(**processing_metadata_data) if processing_metadata_data else None
 

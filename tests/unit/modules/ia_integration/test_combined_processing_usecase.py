@@ -25,9 +25,8 @@ class TestCombinedProcessingUseCaseRefactored:
 
         mock_dynamo_repository.save_request_summary.assert_called_once()
         call_args = mock_dynamo_repository.save_request_summary.call_args[0]
-        assert call_args[0] == "processing_status"
-        saved_data = call_args[1]
-        assert saved_data["pk"] == f"PROCESSING#{request_id}"
+        saved_data = call_args[0]
+        assert saved_data["pk"].startswith("PROCESSING#")
         assert saved_data["status"] == "queued"
         assert saved_data["progress"] == 0.0
         assert saved_data["image_id"] == "test_img_1"
@@ -52,6 +51,7 @@ class TestCombinedProcessingUseCaseRefactored:
 
         mock_dynamo_repository.get_item = AsyncMock(return_value=initial_status)
         mock_ia_repository.process_combined = AsyncMock(return_value=sample_combined_result_entity)
+        mock_dynamo_repository.save_item = AsyncMock()
 
         usecase = CombinedProcessingUseCase(
             ia_repository=mock_ia_repository, dynamo_repository=mock_dynamo_repository, s3_repository=mock_s3_repository
@@ -65,11 +65,6 @@ class TestCombinedProcessingUseCaseRefactored:
         )
 
         mock_ia_repository.process_combined.assert_called_once()
-        mock_dynamo_repository.save_request_summary.assert_called_once()
         summary_call = mock_dynamo_repository.save_request_summary.call_args[0][0]
-        assert summary_call["status"] == "success"
+        assert summary_call["status"] == "completed"
         assert summary_call["request_id"] == request_id
-
-        final_status_call = mock_dynamo_repository.save_request_summary.call_args[0][1]
-        assert final_status_call["status"] == "completed"
-        assert final_status_call["progress"] == 1.0

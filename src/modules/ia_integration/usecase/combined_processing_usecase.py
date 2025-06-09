@@ -111,9 +111,9 @@ class CombinedProcessingUseCase:
             final_item = RequestSummaryMapper.to_dynamo_item(
                 user_id=user_id, request_id=request_id, initial_metadata=full_metadata, combined_result=combined_result
             )
-            
-            await self.dynamo_repository.save_item(final_item)
-            
+
+            await self.dynamo_repository.save_request_summary(final_item)
+
             await self._update_processing_status(request_id, status="completed", progress=1.0)
 
             logger.info(f"Processamento combinado concluído: {request_id} para imagem {image.image_id}")
@@ -189,18 +189,16 @@ class CombinedProcessingUseCase:
             status_data = await self._get_processing_status_data(request_id)
             if not status_data or status_data.get("status") != "completed":
                 return None
-            
+
             items = await self.dynamo_repository.query_items(
-                key_name="request_id",
-                key_value=request_id,
-                index_name="RequestIdIndex"
+                key_name="request_id", key_value=request_id, index_name="RequestIdIndex"
             )
 
             if not items:
                 return None
 
             return CombinedResult.from_dict(items[0])
-            
+
         except Exception as e:
             logger.exception(f"Erro ao buscar resultado por request_id: {e}")
             raise
