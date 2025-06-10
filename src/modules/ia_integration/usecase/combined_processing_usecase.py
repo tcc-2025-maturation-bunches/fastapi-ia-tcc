@@ -1,4 +1,3 @@
-import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -183,55 +182,38 @@ class CombinedProcessingUseCase:
             logger.exception(f"Erro ao recuperar resultado combinado para imagem {image_id}: {e}")
             raise
 
-    async def get_result_by_request_id(self, request_id: str) -> Optional[CombinedResult]:
+    async def get_result_by_request_id(self, request_id: str) -> Optional[Dict[str, Any]]:
         try:
-            status_data = await self._get_processing_status_data(request_id)
-            if not status_data or status_data.get("status") != "completed":
-                return None
-
             result = await self.dynamo_repository.query_items(
                 key_name="request_id", key_value=request_id, index_name="RequestIdIndex"
             )
 
             items = result.get("items", []) if isinstance(result, dict) else result
-
             if not items:
-                logger.warning(f"Nenhum item encontrado para request_id: {request_id}")
+                logger.warning(f"Nenhum resultado encontrado para request_id: {request_id}")
                 return None
-
-            valid_items = []
-            for item in items:
-                if not item or not isinstance(item, dict):
-                    logger.warning(f"Skipping invalid item (not dict or None): {type(item)}")
-                    continue
-
-                if len(item) == 0:
-                    continue
-
-                if "detection_result" in item:
-                    logger.info(f"Found valid CombinedResult item with keys: {list(item.keys())}")
-                    valid_items.append(item)
-                else:
-                    logger.info(f"Skipping item without detection_result. Keys: {list(item.keys())}")
-
-            if not valid_items:
-                logger.warning(f"Nenhum item válido encontrado para request_id: {request_id}")
+            combined_results = [item for item in items if item.get("entity_type") == "COMBINED_RESULT"]
+            if not combined_results:
+                logger.warning(f"Nenhum COMBINED_RESULT encontrado para request_id: {request_id}")
                 return None
+            item = combined_results[0]
+            logger.info(f"Resultado combinado encontrado para request_id: {request_id}")
 
-            first_item = valid_items[0]
-
-            if not first_item or not isinstance(first_item, dict):
-                logger.error(f"first_item validation failed: {type(first_item)}")
-                return None
-
-            logger.info(f"Processing CombinedResult for request_id {request_id} with keys: {list(first_item.keys())}")
-
-            try:
-                return CombinedResult.from_dict(first_item)
-            except Exception as from_dict_error:
-                logger.error(f"Error in CombinedResult.from_dict: {from_dict_error}")
-                logger.error(f"Item that caused error: {json.dumps(first_item, default=str)}")
-                raise
+            return {
+                "status": item.get("status"),
+                "request_id": item.get("request_id"),
+                "image_id": item.get("image_id"),
+                "image_url": item.get("image_url"),
+                "image_result_url": item.get("image_result_url"),
+                "user_id": item.get("user_id"),
+                "createdAt": item.get("createdAt"),
+                "updatedAt": item.get("updatedAt"),
+                "processing_time_ms": item.get("processing_time_ms"),
+                "detection": item.get("detection_result"),
+                "processing_metadata": item.get("processing_metadata"),
+                "initial_metadata": item.get("initial_metadata"),
+                "additional_metadata": item.get("additional_metadata"),
+            }
 
         except Exception as e:
             logger.exception(f"Erro ao buscar resultado por request_id: {e}")
@@ -255,6 +237,7 @@ class CombinedProcessingUseCase:
         try:
             status_data["pk"] = f"PROCESSING#{request_id}"
             status_data["sk"] = "STATUS"
+            status_data["entity_type"] = "PROCESSING_STATUS"
             status_data["request_id"] = request_id
             status_data["ttl"] = int((datetime.now(timezone.utc).timestamp() + 86400))
 
@@ -281,7 +264,7 @@ class CombinedProcessingUseCase:
                 return
 
             status_data.update(kwargs)
-            status_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+            status_data["updatedAt"] = datetime.now(timezone.utc).isoformat()
 
             await self._save_processing_status(request_id, status_data)
 
@@ -289,7 +272,12 @@ class CombinedProcessingUseCase:
             logger.exception(f"Erro ao atualizar status de processamento para {request_id}: {e}")
 
     async def get_all_combined_results(
-        self, user_id: Optional[str] = None, limit: int = 20, last_evaluated_key: Optional[Dict[str, Any]] = None
+        self,
+        user_id: Optional[str] = None,
+        limit: int = 20,
+        last_evaluated_key: Optional[Dict[str, Any]] = None,
+        status_filter: Optional[str] = None,
+        exclude_errors: bool = False,
     ) -> Dict[str, Any]:
         try:
             query_params = {"limit": limit, "last_evaluated_key": last_evaluated_key}
@@ -298,34 +286,69 @@ class CombinedProcessingUseCase:
                 result = await self.dynamo_repository.query_items(
                     key_name="user_id", key_value=user_id, index_name="UserIdIndex", **query_params
                 )
+                items = result.get("items", []) if isinstance(result, dict) else result
+                filtered_items = [item for item in items if item.get("entity_type") == "COMBINED_RESULT"]
             else:
-                result = await self.dynamo_repository.scan_items(
-                    filter_expression="attribute_exists(detection_result)", **query_params
+                result = await self.dynamo_repository.query_items(
+                    key_name="entity_type", key_value="COMBINED_RESULT", index_name="EntityTypeIndex", **query_params
                 )
+                filtered_items = result.get("items", []) if isinstance(result, dict) else result
 
-            items = result.get("items", []) if isinstance(result, dict) else result
             next_page_key = result.get("last_evaluated_key") if isinstance(result, dict) else None
 
             combined_results = []
-            for item in items:
+            for item in filtered_items:
                 if not item or not isinstance(item, dict):
                     continue
 
-                if "detection_result" in item:
-                    try:
-                        combined_result = CombinedResult.from_dict(item)
-                        combined_results.append(combined_result)
-                    except Exception as e:
-                        logger.warning(f"Erro ao converter item para CombinedResult: {e}")
-                        continue
+                item_status = item.get("status", "")
+                if exclude_errors and item_status == "error":
+                    continue
+                if status_filter and item_status != status_filter:
+                    continue
 
-            logger.info(f"Recuperados {len(combined_results)} resultados combinados")
+                try:
+                    combined_result = {
+                        "status": item.get("status"),
+                        "request_id": item.get("request_id"),
+                        "image_id": item.get("image_id"),
+                        "image_url": item.get("image_url"),
+                        "image_result_url": item.get("image_result_url"),
+                        "user_id": item.get("user_id"),
+                        "createdAt": item.get("createdAt"),
+                        "updatedAt": item.get("updatedAt"),
+                        "processing_time_ms": item.get("processing_time_ms"),
+                        "detection": item.get("detection_result"),
+                        "processing_metadata": item.get("processing_metadata"),
+                        "initial_metadata": item.get("initial_metadata"),
+                        "additional_metadata": item.get("additional_metadata"),
+                        **(
+                            {
+                                "error_message": item.get("error_message"),
+                                "error_code": item.get("error_code"),
+                                "error_details": item.get("error_details"),
+                            }
+                            if item_status == "error"
+                            else {}
+                        ),
+                    }
+                    combined_results.append(combined_result)
+                except Exception as e:
+                    logger.warning(f"Erro ao processar item: {e}")
+                    continue
+
+            logger.info(f"Recuperados {len(combined_results)} resultados combinados (filtrados)")
 
             return {
                 "items": combined_results,
                 "next_page_key": next_page_key,
                 "total_count": len(combined_results),
                 "has_more": next_page_key is not None,
+                "filters_applied": {
+                    "status_filter": status_filter,
+                    "exclude_errors": exclude_errors,
+                    "user_id": user_id,
+                },
             }
 
         except Exception as e:

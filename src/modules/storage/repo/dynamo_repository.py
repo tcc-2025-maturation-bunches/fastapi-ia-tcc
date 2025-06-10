@@ -260,9 +260,16 @@ class DynamoRepository(DynamoRepositoryInterface):
                 "IndexName": "EntityTypeIndex",
                 "KeyConditionExpression": "entity_type = :entity_type",
                 "ExpressionAttributeValues": {":entity_type": entity_type},
-                "ScanIndexForward": False,  # Ordem decrescente por createdAt
+                "ScanIndexForward": False,
                 "Limit": limit,
             }
+
+            if entity_type in ["RESULT", "COMBINED_RESULT"]:
+                query_kwargs["FilterExpression"] = "#status <> :error_status AND #status <> :processing_status"
+                query_kwargs["ExpressionAttributeNames"] = {"#status": "status"}
+                query_kwargs["ExpressionAttributeValues"].update(
+                    {":error_status": "error", ":processing_status": "processing"}
+                )
 
             if last_evaluated_key:
                 query_kwargs["ExclusiveStartKey"] = last_evaluated_key

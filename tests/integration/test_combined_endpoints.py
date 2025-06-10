@@ -101,33 +101,65 @@ class TestCombinedEndpointsRefactored:
     async def test_get_results_by_request_id(self, client: TestClient, sample_combined_result_entity):
         """
         Testa a busca de resultado pelo ID da requisição.
-
-        NOTA: Este teste pode falhar se o ContractResponseMapper não estiver alinhado com a
-        entidade CombinedResult, o que indica um bug a ser corrigido na aplicação.
         """
         request_id = "req-combined-9b2f4e"
 
-        with (
-            patch.object(
-                CombinedProcessingUseCase,
-                "get_result_by_request_id",
-                new_callable=AsyncMock,
-                return_value=sample_combined_result_entity,
-            ) as mock_get_result,
-            patch("src.shared.mappers.contract_mapper.ContractResponseMapper.to_contract_response") as mock_mapper,
-        ):
+        mock_result_dict = {
+            "status": "success",
+            "request_id": request_id,
+            "image_id": "test-image-id",
+            "image_url": "https://example.com/image.jpg",
+            "image_result_url": "https://example.com/result.jpg",
+            "user_id": "test-user",
+            "createdAt": "2025-06-10T23:04:15.758406+00:00",
+            "updatedAt": "2025-06-10T23:04:15.758406+00:00",
+            "processing_time_ms": 7864,
+            "detection": {
+                "summary": {
+                    "total_objects": 1,
+                    "objects_with_maturation": 1,
+                    "detection_time_ms": 153,
+                    "maturation_time_ms": 5857,
+                    "average_maturation_score": 0.554,
+                    "model_versions": {"detection": "yolo11n_v5", "maturation": "maturation-resnet18_v1"},
+                },
+                "results": [
+                    {
+                        "class_name": "cachos",
+                        "confidence": 0.927,
+                        "bounding_box": [0.1731, 0.3739, 0.3622, 0.3718],
+                        "maturation_level": {"score": 0.55, "category": "madura"},
+                    }
+                ],
+            },
+            "processing_metadata": {
+                "image_dimensions": {"width": 624, "height": 468},
+                "maturation_distribution": {"verde": 0, "madura": 1, "passada": 0, "nao_analisado": 0},
+            },
+            "initial_metadata": {"location": "test-location"},
+            "additional_metadata": {
+                "source": "webcam",
+                "timestamp": "2025-06-10T23:03:24.318Z",
+                "device_info": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            },
+        }
 
-            mock_mapper.return_value = sample_combined_result_entity.to_contract_dict()
+        with patch.object(
+            CombinedProcessingUseCase,
+            "get_result_by_request_id",
+            new_callable=AsyncMock,
+            return_value=mock_result_dict,
+        ) as mock_get_result:
 
             response = client.get(f"/combined/results/request/{request_id}")
 
-            # O teste espera um 200, mas pode falhar aqui se o mapper estiver quebrado
             assert response.status_code == 200
 
             data = response.json()
             assert data["request_id"] == request_id
             assert data["status"] == "success"
             assert data["detection"]["summary"]["total_objects"] == 1
+            assert data["image_url"] == "https://example.com/image.jpg"
+            assert data["user_id"] == "test-user"
 
             mock_get_result.assert_called_once_with(request_id)
-            mock_mapper.assert_called_once()
