@@ -1,3 +1,4 @@
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -42,8 +43,8 @@ class CombinedProcessingUseCase:
                 "status": "queued",
                 "image_url": image_url,
                 "user_id": user_id,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
                 "progress": 0.0,
                 "maturation_threshold": maturation_threshold,
                 "location": metadata.get("location") if metadata else None,
@@ -103,6 +104,8 @@ class CombinedProcessingUseCase:
             full_metadata = metadata or {}
             full_metadata["image_url"] = image_url
             full_metadata["image_id"] = image.image_id
+            if "timestamp" not in full_metadata:
+                full_metadata["timestamp"] = datetime.now(timezone.utc).isoformat()
 
             final_item = RequestSummaryMapper.to_dynamo_item(
                 user_id=user_id, request_id=request_id, initial_metadata=full_metadata, combined_result=combined_result
@@ -186,14 +189,49 @@ class CombinedProcessingUseCase:
             if not status_data or status_data.get("status") != "completed":
                 return None
 
-            items = await self.dynamo_repository.query_items(
+            result = await self.dynamo_repository.query_items(
                 key_name="request_id", key_value=request_id, index_name="RequestIdIndex"
             )
 
+            items = result.get("items", []) if isinstance(result, dict) else result
+
             if not items:
+                logger.warning(f"Nenhum item encontrado para request_id: {request_id}")
                 return None
 
-            return CombinedResult.from_dict(items[0])
+            valid_items = []
+            for item in items:
+                if not item or not isinstance(item, dict):
+                    logger.warning(f"Skipping invalid item (not dict or None): {type(item)}")
+                    continue
+
+                if len(item) == 0:
+                    continue
+
+                if "detection_result" in item:
+                    logger.info(f"Found valid CombinedResult item with keys: {list(item.keys())}")
+                    valid_items.append(item)
+                else:
+                    logger.info(f"Skipping item without detection_result. Keys: {list(item.keys())}")
+
+            if not valid_items:
+                logger.warning(f"Nenhum item válido encontrado para request_id: {request_id}")
+                return None
+
+            first_item = valid_items[0]
+
+            if not first_item or not isinstance(first_item, dict):
+                logger.error(f"first_item validation failed: {type(first_item)}")
+                return None
+
+            logger.info(f"Processing CombinedResult for request_id {request_id} with keys: {list(first_item.keys())}")
+
+            try:
+                return CombinedResult.from_dict(first_item)
+            except Exception as from_dict_error:
+                logger.error(f"Error in CombinedResult.from_dict: {from_dict_error}")
+                logger.error(f"Item that caused error: {json.dumps(first_item, default=str)}")
+                raise
 
         except Exception as e:
             logger.exception(f"Erro ao buscar resultado por request_id: {e}")
@@ -249,3 +287,47 @@ class CombinedProcessingUseCase:
 
         except Exception as e:
             logger.exception(f"Erro ao atualizar status de processamento para {request_id}: {e}")
+
+    async def get_all_combined_results(
+        self, user_id: Optional[str] = None, limit: int = 20, last_evaluated_key: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        try:
+            query_params = {"limit": limit, "last_evaluated_key": last_evaluated_key}
+
+            if user_id:
+                result = await self.dynamo_repository.query_items(
+                    key_name="user_id", key_value=user_id, index_name="UserIdIndex", **query_params
+                )
+            else:
+                result = await self.dynamo_repository.scan_items(
+                    filter_expression="attribute_exists(detection_result)", **query_params
+                )
+
+            items = result.get("items", []) if isinstance(result, dict) else result
+            next_page_key = result.get("last_evaluated_key") if isinstance(result, dict) else None
+
+            combined_results = []
+            for item in items:
+                if not item or not isinstance(item, dict):
+                    continue
+
+                if "detection_result" in item:
+                    try:
+                        combined_result = CombinedResult.from_dict(item)
+                        combined_results.append(combined_result)
+                    except Exception as e:
+                        logger.warning(f"Erro ao converter item para CombinedResult: {e}")
+                        continue
+
+            logger.info(f"Recuperados {len(combined_results)} resultados combinados")
+
+            return {
+                "items": combined_results,
+                "next_page_key": next_page_key,
+                "total_count": len(combined_results),
+                "has_more": next_page_key is not None,
+            }
+
+        except Exception as e:
+            logger.exception(f"Erro ao recuperar todos os resultados combinados: {e}")
+            raise

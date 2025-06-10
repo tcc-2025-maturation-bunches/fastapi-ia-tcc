@@ -1,10 +1,12 @@
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from src.app.config import settings
 from src.shared.domain.entities.combined_result import CombinedResult
 from src.shared.domain.entities.image import Image
-from src.shared.domain.entities.result import ProcessingResult
+from src.shared.domain.entities.result import DetectionResult, ProcessingResult
+from src.shared.domain.enums.ia_model_type_enum import ModelType
 from src.shared.infra.external.dynamo.dynamo_client import DynamoClient
 from src.shared.infra.repo.dynamo_repository_interface import DynamoRepositoryInterface
 
@@ -74,11 +76,22 @@ class DynamoRepository(DynamoRepositoryInterface):
                 key_name="request_id", key_value=request_id, index_name="RequestIdIndex"
             )
 
-            if not items or len(items) == 0:
-                logger.warning(f"Resultado não encontrado para request_id: {request_id}")
-                return None
+            if items and len(items) > 0:
+                return ProcessingResult.from_dict(items[0])
 
-            return ProcessingResult.from_dict(items[0])
+            logger.info(f"Não encontrado resultado simples para {request_id}, buscando em resultados combinados")
+
+            combined_items = await self.results_client.scan(
+                filter_expression="entity_type = :entity_type AND request_id = :request_id",
+                expression_values={":entity_type": "COMBINED_RESULT", ":request_id": request_id},
+            )
+
+            if combined_items and len(combined_items) > 0:
+                combined_result = CombinedResult.from_dict(combined_items[0])
+                return self._convert_combined_to_processing_result(combined_result, combined_items[0])
+
+            logger.warning(f"Resultado não encontrado para request_id: {request_id}")
+            return None
 
         except Exception as e:
             logger.exception(f"Erro ao recuperar resultado por request_id da tabela de resultados: {e}")
@@ -86,7 +99,8 @@ class DynamoRepository(DynamoRepositoryInterface):
 
     async def get_results_by_image_id(self, image_id: str) -> List[ProcessingResult]:
         try:
-            items = await self.results_client.query_items(key_name="pk", key_value=f"IMG#{image_id}")
+            result = await self.results_client.query_items(key_name="pk", key_value=f"IMG#{image_id}")
+            items = result.get("items", []) if isinstance(result, dict) else result
 
             results = []
             for item in items:
@@ -102,9 +116,10 @@ class DynamoRepository(DynamoRepositoryInterface):
 
     async def get_results_by_user_id(self, user_id: str, limit: int = 10) -> List[ProcessingResult]:
         try:
-            items = await self.results_client.query_items(
+            result = await self.results_client.query_items(
                 key_name="user_id", key_value=user_id, index_name="UserIdIndex", limit=limit
             )
+            items = result.get("items", []) if isinstance(result, dict) else result
 
             results = []
             for item in items:
@@ -293,3 +308,32 @@ class DynamoRepository(DynamoRepositoryInterface):
         except Exception as e:
             logger.error(f"Erro ao realizar scan na tabela de resultados: {e}")
             raise
+
+    def _convert_combined_to_processing_result(
+        self, combined_result: CombinedResult, raw_item: Dict[str, Any]
+    ) -> ProcessingResult:
+        detection_results = []
+        if combined_result.detection and combined_result.detection.results:
+            for res in combined_result.detection.results:
+                detection_results.append(
+                    DetectionResult(
+                        class_name=res.class_name,
+                        confidence=res.confidence,
+                        bounding_box=res.bounding_box,
+                        maturation_level=res.maturation_level.model_dump() if res.maturation_level else None,
+                    )
+                )
+
+        return ProcessingResult(
+            image_id=raw_item.get("image_id", ""),
+            model_type=ModelType.COMBINED,
+            results=detection_results,
+            status=combined_result.status,
+            request_id=combined_result.request_id,
+            processing_timestamp=datetime.fromisoformat(
+                raw_item.get("createdAt", datetime.now(timezone.utc).isoformat())
+            ),
+            summary=combined_result.detection.summary.model_dump() if combined_result.detection else {},
+            image_result_url=combined_result.image_result_url,
+            error_message=combined_result.error_message,
+        )

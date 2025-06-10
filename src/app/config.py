@@ -13,7 +13,7 @@ class Settings:
         self.ENVIRONMENT = os.getenv("ENVIRONMENT", "dev")
         self.DEBUG = os.getenv("DEBUG", "True").lower() == "true"
         self.APP_NAME = "fruit-detection-api"
-        self.APP_VERSION = "0.1.1"
+        self.APP_VERSION = "0.2.0"
 
         # Configurações da AWS
         self.AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
