@@ -12,17 +12,25 @@ logger = logging.getLogger(__name__)
 class DeviceRepository:
     """Repositório para gerenciamento de dispositivos no DynamoDB."""
 
-    def __init__(self, dynamo_client: Optional[DynamoClient] = None):
+    def __init__(self, devices_client: Optional[DynamoClient] = None, activities_client: Optional[DynamoClient] = None):
         self.devices_table = settings.DYNAMODB_DEVICES_TABLE
         self.activities_table = settings.DYNAMODB_DEVICE_ACTIVITIES_TABLE
 
-        self.devices_client = DynamoClient(table_name=self.devices_table)
-        self.activities_client = DynamoClient(table_name=self.activities_table)
+        self.devices_client = devices_client or DynamoClient(table_name=self.devices_table)
+        self.activities_client = activities_client or DynamoClient(table_name=self.activities_table)
+
+        logger.info(
+            f"Inicializando DeviceRepository - Dispositivos: {self.devices_table}, Atividades: {self.activities_table}"
+        )
 
     async def save_device(self, device: Device) -> Dict[str, Any]:
         """Salva um dispositivo na tabela de dispositivos."""
         try:
             item = device.to_dict()
+            item["entity_type"] = "DEVICE"
+            item["createdAt"] = device.created_at.isoformat()
+            item["updatedAt"] = device.updated_at.isoformat()
+
             logger.info(f"Salvando dispositivo {device.device_id} na tabela {self.devices_table}")
             return await self.devices_client.put_item(item)
 
@@ -31,13 +39,13 @@ class DeviceRepository:
             raise
 
     async def get_device(self, device_id: str) -> Optional[Device]:
-        """Recupera um dispositivo pelo ID."""
+        """Recupera um dispositivo pelo ID da tabela de dispositivos."""
         try:
             key = {"pk": f"DEVICE#{device_id}", "sk": f"INFO#{device_id}"}
             item = await self.devices_client.get_item(key)
 
             if not item:
-                logger.warning(f"Dispositivo não encontrado: {device_id}")
+                logger.warning(f"Dispositivo não encontrado na tabela {self.devices_table}: {device_id}")
                 return None
 
             return Device.from_dict(item)
@@ -51,6 +59,8 @@ class DeviceRepository:
         try:
             device.updated_at = datetime.now(timezone.utc)
             item = device.to_dict()
+            item["entity_type"] = "DEVICE"
+            item["updatedAt"] = device.updated_at.isoformat()
 
             logger.info(f"Atualizando dispositivo {device.device_id} na tabela {self.devices_table}")
             return await self.devices_client.put_item(item)
@@ -62,7 +72,6 @@ class DeviceRepository:
     async def list_devices(
         self, status_filter: Optional[str] = None, location_filter: Optional[str] = None, limit: int = 100
     ) -> List[Device]:
-        """Lista dispositivos com filtros opcionais."""
         try:
             scan_params = {
                 "filter_expression": "begins_with(pk, :pk_prefix) AND entity_type = :entity_type",
@@ -119,7 +128,7 @@ class DeviceRepository:
             return False
 
     async def get_devices_by_status(self, status: str) -> List[Device]:
-        """Recupera dispositivos por status usando índice."""
+        """Recupera dispositivos por status usando índice da tabela de dispositivos."""
         try:
             items = await self.devices_client.query_items(key_name="status", key_value=status, index_name="StatusIndex")
 
@@ -133,11 +142,11 @@ class DeviceRepository:
             return devices
 
         except Exception as e:
-            logger.exception(f"Erro ao buscar dispositivos por status: {e}")
+            logger.exception(f"Erro ao buscar dispositivos por status na tabela {self.devices_table}: {e}")
             raise
 
     async def get_devices_by_location(self, location: str) -> List[Device]:
-        """Recupera dispositivos por localização usando índice."""
+        """Recupera dispositivos por localização usando índice da tabela de dispositivos."""
         try:
             items = await self.devices_client.query_items(
                 key_name="location", key_value=location, index_name="LocationIndex"
@@ -153,11 +162,11 @@ class DeviceRepository:
             return devices
 
         except Exception as e:
-            logger.exception(f"Erro ao buscar dispositivos por localização: {e}")
+            logger.exception(f"Erro ao buscar dispositivos por localização na tabela {self.devices_table}: {e}")
             raise
 
     async def get_offline_devices(self, timeout_minutes: int = 5) -> List[Device]:
-        """Recupera dispositivos que estão offline (sem heartbeat recente)."""
+        """Recupera dispositivos que estão offline (sem heartbeat recente) da tabela de dispositivos."""
         try:
             cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
             cutoff_iso = cutoff_time.isoformat()
@@ -184,7 +193,45 @@ class DeviceRepository:
             return devices
 
         except Exception as e:
-            logger.exception(f"Erro ao buscar dispositivos offline: {e}")
+            logger.exception(f"Erro ao buscar dispositivos offline na tabela {self.devices_table}: {e}")
+            raise
+
+    async def get_all_devices(self, limit: int = 50, last_evaluated_key: Optional[Dict[str, Any]] = None):
+        try:
+            logger.info(f"Buscando todos os dispositivos (limit: {limit})")
+
+            query_kwargs = {
+                "IndexName": "EntityTypeIndex",
+                "KeyConditionExpression": "entity_type = :entity_type",
+                "ExpressionAttributeValues": {":entity_type": "DEVICE"},
+                "ScanIndexForward": False,  # Ordem decrescente por createdAt
+                "Limit": limit,
+            }
+
+            if last_evaluated_key:
+                query_kwargs["ExclusiveStartKey"] = last_evaluated_key
+
+            response = self.devices_client.table.query(**query_kwargs)
+            items = response.get("Items", [])
+
+            devices = []
+            for item in items:
+                try:
+                    converted_item = self.devices_client.convert_from_dynamo_item(item)
+                    device = Device.from_dict(converted_item)
+                    devices.append(device.to_dict())  # Retornar como dict para consistência
+                except Exception as e:
+                    logger.warning(f"Erro ao converter item do DynamoDB para Device: {e}")
+                    continue
+
+            next_key = response.get("LastEvaluatedKey")
+
+            logger.info(f"Retornando {len(devices)} dispositivos")
+
+            return {"items": devices, "last_evaluated_key": next_key}
+
+        except Exception as e:
+            logger.exception(f"Erro ao buscar todos os dispositivos: {e}")
             raise
 
     async def save_device_activity(self, device_id: str, activity_type: str, details: Dict[str, Any]) -> str:

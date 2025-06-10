@@ -1,3 +1,5 @@
+import base64
+import json
 import logging
 from typing import List, Optional
 
@@ -78,8 +80,6 @@ async def upload_image(
     try:
         metadata_dict = None
         if metadata:
-            import json
-
             try:
                 metadata_dict = json.loads(metadata)
             except json.JSONDecodeError:
@@ -171,4 +171,66 @@ async def get_results_by_user_id(
         raise
     except Exception as e:
         logger.exception(f"Erro ao recuperar resultados por user_id: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao recuperar resultados: {str(e)}")
+
+
+@storage_router.get("/results/all")
+async def get_all_results(
+    limit: int = Query(50, ge=1, le=200, description="Número máximo de resultados a retornar"),
+    last_key: Optional[str] = Query(None, description="Chave para paginação (JSON codificado em base64)"),
+    result_usecase: GetResultUseCase = Depends(get_result_usecase),
+):
+    """
+    Recupera todos os resultados de inferência de IA armazenados.
+
+    Esta rota utiliza o GSI EntityTypeIndex para buscar eficientemente todos os resultados
+    de tipos RESULT e COMBINED_RESULT com suporte à paginação.
+
+    Args:
+        limit: Número máximo de resultados a retornar (1-200)
+        last_key: Chave de continuação para paginação (JSON codificado em base64)
+
+    Returns:
+        JSON contendo:
+        - results: Lista de resultados de inferência
+        - next_key: Chave para próxima página (se houver mais resultados)
+        - total_returned: Número de resultados retornados nesta página
+    """
+    try:
+        last_evaluated_key = None
+        if last_key:
+            try:
+                decoded_key = base64.b64decode(last_key).decode("utf-8")
+                last_evaluated_key = json.loads(decoded_key)
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(f"Chave de paginação inválida: {e}")
+                raise HTTPException(
+                    status_code=400, detail="Chave de paginação inválida. Deve ser JSON válido codificado em base64."
+                )
+
+        response = await result_usecase.get_all_results(limit=limit, last_evaluated_key=last_evaluated_key)
+
+        results = response.get("items", [])
+        next_evaluated_key = response.get("last_evaluated_key")
+
+        next_key = None
+        if next_evaluated_key:
+            next_key_json = json.dumps(next_evaluated_key, separators=(",", ":"))
+            next_key = base64.b64encode(next_key_json.encode("utf-8")).decode("utf-8")
+
+        logger.info(f"Retornando {len(results)} resultados de inferência (limit: {limit})")
+
+        return {
+            "success": True,
+            "results": results,
+            "next_key": next_key,
+            "total_returned": len(results),
+            "has_more": next_key is not None,
+            "pagination": {"limit": limit, "has_next_page": next_key is not None, "next_page_key": next_key},
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Erro ao recuperar todos os resultados de inferência: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao recuperar resultados: {str(e)}")

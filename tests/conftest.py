@@ -90,7 +90,6 @@ def sample_ec2_combined_response():
         "processing_metadata": {
             "image_dimensions": {"width": 1920, "height": 1080},
             "maturation_distribution": {"verde": 0, "madura": 1, "passada": 0, "nao_analisado": 0},
-            "preprocessing_time_ms": 45,
         },
     }
 

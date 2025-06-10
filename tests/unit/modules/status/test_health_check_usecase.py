@@ -168,13 +168,27 @@ class TestHealthCheckUseCase:
     @pytest.mark.asyncio
     async def test_check_dynamodb_status(self):
         mock_client = MagicMock()
-        table_name = "fruit-detection-dev-results"
-        mock_client.describe_table.return_value = {"Table": {"TableName": table_name, "TableStatus": "ACTIVE"}}
+        table_names = [
+            "fruit-detection-dev-results",
+            "fruit-detection-dev-devices",
+            "fruit-detection-dev-device-activities",
+        ]
+
+        mock_client.describe_table.return_value = {
+            "Table": {"TableName": "fruit-detection-dev-results", "TableStatus": "ACTIVE"}
+        }
 
         with patch("boto3.client", return_value=mock_client):
-            with patch("src.app.config.settings.DYNAMODB_TABLE_NAME", table_name):
-                usecase = HealthCheckUseCase()
-                result = await usecase._check_dynamodb_status()
+            with patch("src.app.config.settings.DYNAMODB_TABLE_NAME", table_names[0]):
+                with patch("src.app.config.settings.DYNAMODB_DEVICES_TABLE", table_names[1]):
+                    with patch("src.app.config.settings.DYNAMODB_DEVICE_ACTIVITIES_TABLE", table_names[2]):
+                        usecase = HealthCheckUseCase()
+                        result = await usecase._check_dynamodb_status()
 
-                assert result["status"] == "healthy"
-                assert result["table_name"] == table_name
+                        assert result["status"] == "healthy"
+                        assert result["message"] == "Todas as tabelas DynamoDB estão ativas"
+                        assert len(result["tables"]) == 3
+
+                        for table_status in result["tables"]:
+                            assert table_status["is_active"] is True
+                            assert table_status["status"] == "active"

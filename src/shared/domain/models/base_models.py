@@ -93,4 +93,3 @@ class MaturationDistribution(BaseModel):
 class ProcessingMetadata(BaseModel):
     image_dimensions: ImageDimensions
     maturation_distribution: MaturationDistribution
-    preprocessing_time_ms: int
