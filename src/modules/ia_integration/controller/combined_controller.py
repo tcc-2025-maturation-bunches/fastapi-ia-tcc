@@ -1,7 +1,7 @@
 import logging
-from typing import Optional
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
 from src.app.config import settings
 from src.modules.ia_integration.usecase.combined_processing_usecase import CombinedProcessingUseCase
@@ -106,7 +106,7 @@ async def get_combined_results(
         raise HTTPException(status_code=500, detail=f"Erro ao recuperar resultados combinados: {str(e)}")
 
 
-@combined_router.get("/results/request/{request_id}", response_model=Optional[CombinedContractResponse])
+@combined_router.get("/results/request/{request_id}", response_model=Dict[str, Any])
 async def get_results_by_request_id(
     request_id: str,
     combined_usecase: CombinedProcessingUseCase = Depends(get_combined_processing_usecase),
@@ -116,9 +116,69 @@ async def get_results_by_request_id(
 
         if not result:
             raise HTTPException(status_code=404, detail=f"Resultado para request {request_id} não encontrado")
+        return result
 
-        return ContractResponseMapper.to_contract_response(result)
-
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"Erro ao recuperar resultados pelo request_id: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erro ao recuperar resultados pelo request_id: {str(e)}")
+
+
+@combined_router.get("/results", response_model=Dict[str, Any])
+async def get_all_combined_results(
+    user_id: Optional[str] = Query(None, description="ID do usuário para filtrar resultados"),
+    limit: int = Query(20, ge=1, le=100, description="Número de itens por página (máximo 100)"),
+    page_token: Optional[str] = Query(None, description="Token para paginação"),
+    status: Optional[str] = Query(None, description="Filtrar por status (success, error, processing)"),
+    exclude_errors: bool = Query(False, description="Excluir resultados com erro"),
+    combined_usecase: CombinedProcessingUseCase = Depends(get_combined_processing_usecase),
+):
+    try:
+        last_evaluated_key = None
+        if page_token:
+            try:
+                import base64
+                import json
+
+                decoded_token = base64.b64decode(page_token.encode()).decode()
+                last_evaluated_key = json.loads(decoded_token)
+            except Exception as e:
+                logger.warning(f"Token de página inválido: {e}")
+                raise HTTPException(status_code=400, detail="Token de página inválido")
+
+        result = await combined_usecase.get_all_combined_results(
+            user_id=user_id,
+            limit=limit,
+            last_evaluated_key=last_evaluated_key,
+            status_filter=status,
+            exclude_errors=exclude_errors,
+        )
+
+        contract_results = result["items"]
+
+        next_page_token = None
+        if result["next_page_key"]:
+            try:
+                import base64
+                import json
+
+                token_json = json.dumps(result["next_page_key"])
+                next_page_token = base64.b64encode(token_json.encode()).decode()
+            except Exception as e:
+                logger.warning(f"Erro ao codificar token de página: {e}")
+
+        return {
+            "items": contract_results,
+            "total_count": result["total_count"],
+            "has_more": result["has_more"],
+            "next_page_token": next_page_token,
+            "current_page_size": len(contract_results),
+            "filters_applied": result.get("filters_applied", {}),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Erro ao recuperar todos os resultados combinados: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao recuperar todos os resultados combinados: {str(e)}")

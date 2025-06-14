@@ -22,6 +22,10 @@ class CombinedResult:
         error_code: Optional[str] = None,
         error_message: Optional[str] = None,
         error_details: Optional[Dict[str, Any]] = None,
+        image_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        image_url: Optional[str] = None,
+        **kwargs,
     ):
         self.status = status
         self.request_id = request_id or f"req-combined-{uuid4().hex[:8]}"
@@ -29,10 +33,13 @@ class CombinedResult:
         self.image_result_url = image_result_url
         self.processing_time_ms = processing_time_ms
         self.processing_metadata = processing_metadata
-
         self.error_code = error_code
         self.error_message = error_message
         self.error_details = error_details
+        self.image_id = image_id
+        self.user_id = user_id
+        self.image_url = image_url
+        self.extra_fields = kwargs
 
     def to_contract_dict(self) -> Dict[str, Any]:
         base = {
@@ -42,6 +49,14 @@ class CombinedResult:
             "image_result_url": self.image_result_url,
             "processing_time_ms": self.processing_time_ms,
         }
+
+        if self.image_id:
+            base["image_id"] = self.image_id
+        if self.user_id:
+            base["user_id"] = self.user_id
+        if self.image_url:
+            base["image_url"] = self.image_url
+
         if self.processing_metadata is not None:
             base["processing_metadata"] = self.processing_metadata.model_dump()
 
@@ -68,6 +83,7 @@ class CombinedResult:
         error_code: Optional[str] = None,
         error_message: Optional[str] = None,
         error_details: Optional[Dict[str, Any]] = None,
+        **kwargs,
     ) -> "CombinedResult":
         detection = ContractDetection(
             results=[
@@ -86,33 +102,120 @@ class CombinedResult:
             error_code=error_code,
             error_message=error_message,
             error_details=error_details,
+            **kwargs,
         )
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "CombinedResult":
         detection_data = data.get("detection_result", {})
         detection = None
+
         if detection_data and detection_data.get("summary"):
             summary_data = detection_data.get("summary", {})
-            if "model_versions" not in summary_data:
-                summary_data["model_versions"] = {}
-            summary = ContractDetectionSummary(**summary_data)
+
+            def safe_int(value, default=0):
+                try:
+                    return int(value) if value is not None else default
+                except (ValueError, TypeError):
+                    return default
+
+            def safe_float(value, default=0.0):
+                try:
+                    return float(value) if value is not None else default
+                except (ValueError, TypeError):
+                    return default
+
+            model_versions = summary_data.get("model_versions", {})
+            if not isinstance(model_versions, dict):
+                model_versions = {"detection": "unknown", "maturation": "unknown"}
+
+            summary = ContractDetectionSummary(
+                total_objects=safe_int(summary_data.get("total_objects")),
+                objects_with_maturation=safe_int(summary_data.get("objects_with_maturation")),
+                detection_time_ms=safe_int(summary_data.get("detection_time_ms")),
+                maturation_time_ms=safe_int(summary_data.get("maturation_time_ms")),
+                average_maturation_score=safe_float(summary_data.get("average_maturation_score")),
+                model_versions=model_versions,
+            )
 
             results_data = detection_data.get("results", [])
-            results = [ContractDetectionResult(**res) for res in results_data]
+            results = []
+
+            for res in results_data:
+                confidence = safe_float(res.get("confidence"))
+
+                bbox = res.get("bounding_box", [])
+                if isinstance(bbox, list) and all(isinstance(x, str) for x in bbox):
+                    bbox = [safe_float(x) for x in bbox]
+
+                maturation_data = res.get("maturation_level")
+                maturation_level = None
+                if maturation_data:
+                    from src.shared.domain.models.base_models import MaturationInfo
+
+                    maturation_level = MaturationInfo(
+                        score=safe_float(maturation_data.get("score", 0)),
+                        category=maturation_data.get("category", "unknown"),
+                    )
+
+                result = ContractDetectionResult(
+                    class_name=res.get("class_name", "unknown"),
+                    confidence=confidence,
+                    bounding_box=bbox,
+                    maturation_level=maturation_level,
+                )
+                results.append(result)
+
             detection = ContractDetection(results=results, summary=summary)
 
         processing_metadata_data = data.get("processing_metadata")
-        processing_metadata = ProcessingMetadata(**processing_metadata_data) if processing_metadata_data else None
+        processing_metadata = None
+
+        if processing_metadata_data:
+            image_dimensions = processing_metadata_data.get("image_dimensions", {})
+            if image_dimensions:
+                image_dimensions = {
+                    "width": int(image_dimensions.get("width", 0)),
+                    "height": int(image_dimensions.get("height", 0)),
+                }
+
+            maturation_dist = processing_metadata_data.get("maturation_distribution", {})
+            if maturation_dist:
+                maturation_dist = {k: int(v) if isinstance(v, str) else v for k, v in maturation_dist.items()}
+
+            from src.shared.domain.models.base_models import ImageDimensions, MaturationDistribution
+
+            processing_metadata = ProcessingMetadata(
+                image_dimensions=ImageDimensions(**image_dimensions) if image_dimensions else None,
+                maturation_distribution=MaturationDistribution(**maturation_dist) if maturation_dist else None,
+            )
+
+        processing_time_ms = data.get("processing_time_ms", 0)
+        if isinstance(processing_time_ms, str):
+            try:
+                processing_time_ms = int(processing_time_ms)
+            except (ValueError, TypeError):
+                processing_time_ms = 0
+
+        error_info = data.get("error_info", {}) or {}
 
         return cls(
             status=data.get("status", "unknown"),
             request_id=data.get("request_id"),
             detection=detection,
             image_result_url=data.get("image_result_url"),
-            processing_time_ms=data.get("processing_time_ms", 0),
+            processing_time_ms=processing_time_ms,
             processing_metadata=processing_metadata,
-            error_code=data.get("error_info", {}).get("error_code"),
-            error_message=data.get("error_info", {}).get("error_message"),
-            error_details=data.get("error_info", {}).get("error_details"),
+            error_code=error_info.get("error_code"),
+            error_message=error_info.get("error_message"),
+            error_details=error_info.get("error_details"),
+            image_id=data.get("image_id"),
+            user_id=data.get("user_id"),
+            image_url=data.get("image_url"),
+            pk=data.get("pk"),
+            sk=data.get("sk"),
+            createdAt=data.get("createdAt"),
+            updatedAt=data.get("updatedAt"),
+            initial_metadata=data.get("initial_metadata"),
+            additional_metadata=data.get("additional_metadata"),
         )

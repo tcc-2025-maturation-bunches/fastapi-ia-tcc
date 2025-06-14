@@ -1,3 +1,5 @@
+import base64
+import json
 import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -120,6 +122,121 @@ async def list_devices(
     except Exception as e:
         logger.exception(f"Erro ao listar dispositivos: {e}")
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
+
+
+@monitoring_router.get("/all")
+async def get_all_devices(
+    limit: int = Query(50, ge=1, le=200, description="Número máximo de dispositivos a retornar"),
+    last_key: Optional[str] = Query(None, description="Chave para paginação (JSON codificado em base64)"),
+):
+    """
+    Recupera todos os dispositivos registrados no sistema.
+
+    Esta rota utiliza o GSI EntityTypeIndex para buscar eficientemente todos os dispositivos
+    registrados com suporte à paginação.
+
+    Args:
+        limit: Número máximo de dispositivos a retornar (1-200)
+        last_key: Chave de continuação para paginação (JSON codificado em base64)
+
+    Returns:
+        JSON contendo:
+        - devices: Lista de dispositivos registrados
+        - next_key: Chave para próxima página (se houver mais dispositivos)
+        - total_returned: Número de dispositivos retornados nesta página
+    """
+    try:
+        last_evaluated_key = None
+        if last_key:
+            try:
+                decoded_key = base64.b64decode(last_key).decode("utf-8")
+                last_evaluated_key = json.loads(decoded_key)
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(f"Chave de paginação inválida: {e}")
+                raise HTTPException(
+                    status_code=400, detail="Chave de paginação inválida. Deve ser JSON válido codificado em base64."
+                )
+
+        from src.modules.device_monitoring.repo.device_repository import DeviceRepository
+
+        device_repository = DeviceRepository()
+
+        response = await device_repository.get_all_devices(limit=limit, last_evaluated_key=last_evaluated_key)
+
+        devices = response.get("items", [])
+        next_evaluated_key = response.get("last_evaluated_key")
+
+        next_key = None
+        if next_evaluated_key:
+            next_key_json = json.dumps(next_evaluated_key, separators=(",", ":"))
+            next_key = base64.b64encode(next_key_json.encode("utf-8")).decode("utf-8")
+
+        enriched_devices = []
+        for device_data in devices:
+            last_seen = device_data.get("last_seen")
+            is_online = False
+            if last_seen:
+                try:
+                    last_seen_dt = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+                    time_diff = datetime.now(last_seen_dt.tzinfo) - last_seen_dt
+                    is_online = time_diff.total_seconds() < 300  # 5 minutos
+                except (ValueError, TypeError, AttributeError):
+                    is_online = False
+
+            stats = device_data.get("stats", {})
+            total_captures = stats.get("total_captures", 0)
+            successful_captures = stats.get("successful_captures", 0)
+            success_rate = 0.0
+            if total_captures > 0:
+                success_rate = (successful_captures / total_captures) * 100
+
+            enriched_device = {
+                "device_id": device_data.get("device_id"),
+                "device_name": device_data.get("device_name"),
+                "location": device_data.get("location"),
+                "status": device_data.get("status"),
+                "is_online": is_online,
+                "last_seen": last_seen,
+                "created_at": device_data.get("created_at"),
+                "updated_at": device_data.get("updated_at"),
+                "capabilities": device_data.get("capabilities", {}),
+                "summary_stats": {
+                    "total_captures": total_captures,
+                    "successful_captures": successful_captures,
+                    "failed_captures": stats.get("failed_captures", 0),
+                    "success_rate": round(success_rate, 2),
+                    "uptime_hours": stats.get("uptime_hours", 0),
+                },
+                "config": device_data.get("config", {}),
+            }
+            enriched_devices.append(enriched_device)
+
+        total_returned = len(enriched_devices)
+        online_count = sum(1 for d in enriched_devices if d["is_online"])
+        offline_count = total_returned - online_count
+
+        logger.info(f"Retornando {total_returned} dispositivos (limit: {limit})")
+
+        return {
+            "success": True,
+            "devices": enriched_devices,
+            "next_key": next_key,
+            "total_returned": total_returned,
+            "has_more": next_key is not None,
+            "summary": {
+                "total_devices": total_returned,
+                "online_devices": online_count,
+                "offline_devices": offline_count,
+                "locations": list(set(d["location"] for d in enriched_devices if d["location"])),
+            },
+            "pagination": {"limit": limit, "has_next_page": next_key is not None, "next_page_key": next_key},
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Erro ao recuperar todos os dispositivos: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao recuperar dispositivos: {str(e)}")
 
 
 @monitoring_router.get("/{device_id}")

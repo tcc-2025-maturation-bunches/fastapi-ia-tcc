@@ -3,24 +3,80 @@ import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from dotenv import load_dotenv
 from fastapi.testclient import TestClient
+
+
+def setup_test_environment():
+    test_env_path = os.path.join(os.path.dirname(__file__), ".env.test")
+
+    if os.path.exists(test_env_path):
+        print(f"✅ Carregando variáveis de ambiente de: {test_env_path}")
+
+        with open(test_env_path, "r", encoding="utf-8") as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    try:
+                        key, value = line.split("=", 1)
+                        key = key.strip()
+                        value = value.strip()
+
+                        if value.startswith('"') and value.endswith('"'):
+                            value = value[1:-1]
+                        elif value.startswith("'") and value.endswith("'"):
+                            value = value[1:-1]
+                        os.environ[key] = value
+
+                    except ValueError:
+                        print(f"⚠️  Erro ao processar linha {line_num} em .env.test: {line}")
+                        continue
+                else:
+                    print(f"⚠️  Formato inválido na linha {line_num} em .env.test: {line}")
+
+        print("✅ Variáveis de ambiente de teste carregadas com sucesso")
+
+        important_vars = ["ENVIRONMENT", "DYNAMODB_TABLE_NAME", "S3_IMAGES_BUCKET", "S3_RESULTS_BUCKET", "AWS_REGION"]
+        print("Variáveis importantes carregadas:")
+        for var in important_vars:
+            value = os.environ.get(var, "NÃO DEFINIDA")
+            print(f"  {var}: {value}")
+    else:
+        print(f"⚠️  Arquivo .env.test não encontrado em: {test_env_path}")
+        print("⚠️  Usando valores padrão para testes")
+
+        default_test_vars = {
+            "ENVIRONMENT": "test",
+            "DEBUG": "True",
+            "AWS_REGION": "us-east-1",
+            "DYNAMODB_TABLE_NAME": "fruit-detection-test-results",
+            "DYNAMODB_DEVICES_TABLE": "fruit-detection-test-devices",
+            "DYNAMODB_DEVICE_ACTIVITIES_TABLE": "fruit-detection-test-device-activities",
+            "S3_IMAGES_BUCKET": "fruit-detection-test-images",
+            "S3_RESULTS_BUCKET": "fruit-detection-test-results",
+            "EC2_IA_ENDPOINT": "http://localhost:8001",
+        }
+
+        for key, value in default_test_vars.items():
+            os.environ[key] = value
+
+
+setup_test_environment()
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.app.main import app
-from src.shared.domain.entities.combined_result import CombinedResult
-from src.shared.domain.entities.image import Image
-from src.shared.domain.entities.result import DetectionResult, ProcessingResult
-from src.shared.domain.enums.ia_model_type_enum import ModelType
-from src.shared.domain.models.base_models import ProcessingMetadata
-from src.shared.domain.models.combined_models import (
+from src.app.main import app  # noqa: E402
+from src.shared.domain.entities.combined_result import CombinedResult  # noqa: E402
+from src.shared.domain.entities.image import Image  # noqa: E402
+from src.shared.domain.entities.result import DetectionResult, ProcessingResult  # noqa: E402
+from src.shared.domain.enums.ia_model_type_enum import ModelType  # noqa: E402
+from src.shared.domain.models.base_models import ProcessingMetadata  # noqa: E402
+from src.shared.domain.models.combined_models import (  # noqa: E402
     ContractDetection,
     ContractDetectionResult,
     ContractDetectionSummary,
 )
-
-load_dotenv(".env.test")
 
 
 @pytest.fixture(scope="session")
@@ -90,7 +146,6 @@ def sample_ec2_combined_response():
         "processing_metadata": {
             "image_dimensions": {"width": 1920, "height": 1080},
             "maturation_distribution": {"verde": 0, "madura": 1, "passada": 0, "nao_analisado": 0},
-            "preprocessing_time_ms": 45,
         },
     }
 

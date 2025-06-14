@@ -97,8 +97,8 @@ class Device:
             "location": self.location,
             "capabilities": self.capabilities,
             "status": self.status,
-            "created_at": self.created_at.isoformat(),
-            "updated_at": self.updated_at.isoformat(),
+            "createdAt": self.created_at.isoformat(),
+            "updatedAt": self.updated_at.isoformat(),
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
             "capture_interval": self.capture_interval,
             "stats": self.stats,
@@ -109,12 +109,12 @@ class Device:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Device":
         created_at = None
-        if data.get("created_at"):
-            created_at = datetime.fromisoformat(data["created_at"])
+        if data.get("createdAt"):
+            created_at = datetime.fromisoformat(data["createdAt"])
 
         updated_at = None
-        if data.get("updated_at"):
-            updated_at = datetime.fromisoformat(data["updated_at"])
+        if data.get("updatedAt"):
+            updated_at = datetime.fromisoformat(data["updatedAt"])
 
         last_seen = None
         if data.get("last_seen"):

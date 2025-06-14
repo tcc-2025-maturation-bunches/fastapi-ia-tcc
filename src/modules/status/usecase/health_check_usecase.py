@@ -63,20 +63,50 @@ class HealthCheckUseCase:
     async def _check_dynamodb_status(self) -> Dict[str, Any]:
         try:
             client = boto3.client("dynamodb", region_name=settings.AWS_REGION)
-            response = client.describe_table(TableName=settings.DYNAMODB_TABLE_NAME)
+            tables = [
+                settings.DYNAMODB_TABLE_NAME,
+                settings.DYNAMODB_DEVICES_TABLE,
+                settings.DYNAMODB_DEVICE_ACTIVITIES_TABLE,
+            ]
+            table_statuses = []
 
-            if response and "Table" in response:
-                table_status = response["Table"]["TableStatus"]
-                return {
-                    "status": "healthy" if table_status == "ACTIVE" else "degraded",
-                    "message": f"DynamoDB está {table_status}",
-                    "table_name": settings.DYNAMODB_TABLE_NAME,
-                }
+            for table in tables:
+                try:
+                    response = client.describe_table(TableName=table)
+                    if response and "Table" in response:
+                        table_status = response["Table"]["TableStatus"]
+                        table_statuses.append(
+                            {
+                                "table": table,
+                                "status": table_status.lower(),
+                                "is_active": table_status.lower() == "active",
+                            }
+                        )
+                    else:
+                        table_statuses.append(
+                            {
+                                "table": table,
+                                "status": "unknown",
+                                "is_active": False,
+                                "error": "Resposta inválida da API",
+                            }
+                        )
+                except Exception as e:
+                    logger.warning(f"Erro ao verificar tabela {table}: {e}")
+                    table_statuses.append(
+                        {"table": table, "status": "unavailable", "is_active": False, "error": str(e)}
+                    )
+
+            all_active = all(t["is_active"] for t in table_statuses)
 
             return {
-                "status": "unknown",
-                "message": "Não foi possível determinar o status do DynamoDB",
-                "table_name": settings.DYNAMODB_TABLE_NAME,
+                "status": "healthy" if all_active else "degraded",
+                "message": (
+                    "Todas as tabelas DynamoDB estão ativas"
+                    if all_active
+                    else "Algumas tabelas DynamoDB não estão ativas"
+                ),
+                "tables": table_statuses,
             }
 
         except Exception as e:
@@ -84,7 +114,6 @@ class HealthCheckUseCase:
             return {
                 "status": "unhealthy",
                 "message": f"Erro ao verificar DynamoDB: {str(e)}",
-                "table_name": settings.DYNAMODB_TABLE_NAME,
             }
 
     async def _check_s3_status(self) -> Dict[str, Any]:

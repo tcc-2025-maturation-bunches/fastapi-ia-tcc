@@ -88,7 +88,7 @@ class S3Client:
 
             self.client.upload_fileobj(file_obj, self.bucket_name, key, ExtraArgs=extra_args)
 
-            return self.get_file_url(key)
+            return await self.get_file_url(key)
         except ClientError as e:
             logger.error(f"Erro ao fazer upload de arquivo para S3: {e}")
             raise

@@ -65,8 +65,17 @@ class MaturationInfo(BaseModel):
 
 
 class ModelVersions(BaseModel):
-    detection: str
-    maturation: str
+    detection: str = "unknown"
+    maturation: str = "unknown"
+
+    def __init__(self, **data):
+        if isinstance(data.get("detection"), dict):
+            super().__init__(
+                detection=data["detection"].get("detection", "unknown"),
+                maturation=data["detection"].get("maturation", "unknown"),
+            )
+        else:
+            super().__init__(**data)
 
 
 class ContractDetectionSummary(BaseModel):
@@ -75,7 +84,12 @@ class ContractDetectionSummary(BaseModel):
     detection_time_ms: int
     maturation_time_ms: int
     average_maturation_score: float
-    model_versions: ModelVersions
+    model_versions: Optional[ModelVersions] = None
+
+    def __init__(self, **data):
+        if "model_versions" in data and isinstance(data["model_versions"], dict):
+            data["model_versions"] = ModelVersions(**data["model_versions"])
+        super().__init__(**data)
 
 
 class ImageDimensions(BaseModel):
@@ -84,13 +98,12 @@ class ImageDimensions(BaseModel):
 
 
 class MaturationDistribution(BaseModel):
-    verde: int
-    madura: int
-    passada: int
-    nao_analisado: int
+    verde: int = 0
+    madura: int = 0
+    passada: int = 0
+    nao_analisado: int = 0
 
 
 class ProcessingMetadata(BaseModel):
     image_dimensions: ImageDimensions
     maturation_distribution: MaturationDistribution
-    preprocessing_time_ms: int
