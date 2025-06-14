@@ -73,7 +73,7 @@ class TestDynamoClient:
 
     def test_init_with_defaults(self, mock_boto3_table):
         client = DynamoClient()
-        assert client.table_name == "fruit-detection-dev-results"
+        assert client.table_name == "fruit-detection-test-results"
         assert client.region == "us-east-1"
 
     def test_init_with_custom_values(self, mock_boto3_table):

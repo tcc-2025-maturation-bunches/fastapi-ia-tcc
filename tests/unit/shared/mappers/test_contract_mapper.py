@@ -89,7 +89,6 @@ class TestContractResponseMapper:
         )
 
         contract_response = ContractResponseMapper.to_contract_response(combined_result)
-        print(contract_response)
         assert contract_response.status == "error"
         assert contract_response.request_id == "req-error-456"
         assert contract_response.image_result_url is None

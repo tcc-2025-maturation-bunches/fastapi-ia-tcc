@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -211,7 +212,7 @@ class DeviceRepository:
             if last_evaluated_key:
                 query_kwargs["ExclusiveStartKey"] = last_evaluated_key
 
-            response = self.devices_client.table.query(**query_kwargs)
+            response = await asyncio.to_thread(self.devices_client.table.query, **query_kwargs)
             items = response.get("Items", [])
 
             devices = []
