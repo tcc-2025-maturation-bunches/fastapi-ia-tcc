@@ -1,5 +1,10 @@
 from src.shared.domain.entities.combined_result import CombinedResult
-from src.shared.domain.models.base_models import MaturationInfo
+from src.shared.domain.models.base_models import (
+    ImageDimensions,
+    MaturationDistribution,
+    MaturationInfo,
+    ProcessingMetadata,
+)
 from src.shared.domain.models.combined_models import (
     CombinedContractResponse,
     ContractDetection,
@@ -73,11 +78,18 @@ class ContractResponseMapper:
 
         contract_detection = ContractDetection(results=contract_results, summary=detection_summary)
 
+        processing_metadata = combined_result.processing_metadata
+        if processing_metadata is None:
+            processing_metadata = ProcessingMetadata(
+                image_dimensions=ImageDimensions(width=0, height=0),
+                maturation_distribution=MaturationDistribution(verde=0, madura=0, passada=0, nao_analisado=0),
+            )
+
         return CombinedContractResponse(
             status=combined_result.status,
             request_id=combined_result.request_id,
             detection=contract_detection,
             image_result_url=combined_result.image_result_url,
             processing_time_ms=combined_result.processing_time_ms,
-            processing_metadata=combined_result.processing_metadata,
+            processing_metadata=processing_metadata,
         )
