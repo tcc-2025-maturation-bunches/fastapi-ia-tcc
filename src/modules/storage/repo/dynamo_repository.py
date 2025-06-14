@@ -240,9 +240,15 @@ class DynamoRepository(DynamoRepositoryInterface):
             limited_items = all_items[:limit]
             next_key = None
             if len(all_items) > limit:
-                next_key = {"entity_type": "RESULT", "createdAt": limited_items[-1].get("createdAt")}
-            elif result_response.get("last_evaluated_key"):
-                next_key = result_response["last_evaluated_key"]
+                next_key = {
+                    "entity_type": limited_items[-1].get("entity_type"),
+                    "createdAt": limited_items[-1].get("createdAt"),
+                }
+            elif result_response.get("last_evaluated_key") or combined_response.get("last_evaluated_key"):
+                next_key = {
+                    "RESULT_last_evaluated_key": result_response.get("last_evaluated_key"),
+                    "COMBINED_RESULT_last_evaluated_key": combined_response.get("last_evaluated_key"),
+                }
 
             logger.info(f"Retornando {len(limited_items)} resultados de inferência")
 

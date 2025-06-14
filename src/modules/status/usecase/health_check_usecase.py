@@ -76,7 +76,11 @@ class HealthCheckUseCase:
                     if response and "Table" in response:
                         table_status = response["Table"]["TableStatus"]
                         table_statuses.append(
-                            {"table": table, "status": table_status.lower(), "is_active": table_status == "ACTIVE"}
+                            {
+                                "table": table,
+                                "status": table_status.lower(),
+                                "is_active": table_status.lower() == "active",
+                            }
                         )
                     else:
                         table_statuses.append(
