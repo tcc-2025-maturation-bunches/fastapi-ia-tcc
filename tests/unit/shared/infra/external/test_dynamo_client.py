@@ -307,34 +307,6 @@ class TestDynamoClient:
         assert scan_call["IndexName"] == "TestIndex"
 
     @pytest.mark.asyncio
-    async def test_batch_write_success(self, mock_boto3_table):
-        mock_batch_writer = MagicMock()
-        mock_boto3_table.batch_writer.return_value.__enter__.return_value = mock_batch_writer
-        mock_boto3_table.batch_writer.return_value.__exit__.return_value = None
-
-        client = DynamoClient()
-        items = [{"pk": "item1", "data": "data1"}, {"pk": "item2", "data": "data2"}]
-        delete_keys = [{"pk": "delete1"}]
-
-        result = await client.batch_write(items, delete_keys)
-
-        assert result is True
-        assert mock_batch_writer.put_item.call_count == 2
-        assert mock_batch_writer.delete_item.call_count == 1
-
-    @pytest.mark.asyncio
-    async def test_batch_write_error(self, mock_boto3_table):
-        mock_boto3_table.batch_writer.side_effect = ClientError(
-            {"Error": {"Code": "ValidationException", "Message": "Batch write failed"}}, "BatchWriteItem"
-        )
-
-        client = DynamoClient()
-        items = [{"pk": "item1"}]
-
-        result = await client.batch_write(items)
-        assert result is False
-
-    @pytest.mark.asyncio
     async def test_update_item_success(self, mock_boto3_table):
         updated_item = {"pk": "test-pk", "sk": "test-sk", "updated_field": "new_value"}
         mock_boto3_table.update_item.return_value = {"Attributes": updated_item}

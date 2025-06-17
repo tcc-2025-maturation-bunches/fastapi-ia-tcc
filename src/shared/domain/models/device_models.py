@@ -5,20 +5,17 @@ from pydantic import BaseModel, Field, HttpUrl
 
 
 class DeviceCapabilities(BaseModel):
-    """Capacidades do dispositivo."""
 
     camera_resolution: Optional[str] = "1280x720"
     auto_capture: bool = True
     local_storage: bool = True
-    processing_power: Optional[str] = "low"  # low, medium, high
-    platform: Optional[str] = None  # linux, windows, raspberry-pi
+    processing_power: Optional[str] = "low"
+    platform: Optional[str] = None
     python_version: Optional[str] = None
     opencv_version: Optional[str] = None
 
 
 class DeviceConfig(BaseModel):
-    """Configurações do dispositivo."""
-
     auto_upload: bool = True
     store_local: bool = True
     image_quality: int = Field(85, ge=50, le=100)
@@ -31,8 +28,6 @@ class DeviceConfig(BaseModel):
 
 
 class DeviceStats(BaseModel):
-    """Estatísticas do dispositivo."""
-
     total_captures: int = 0
     successful_captures: int = 0
     failed_captures: int = 0
@@ -42,8 +37,6 @@ class DeviceStats(BaseModel):
 
 
 class DeviceRegistrationRequest(BaseModel):
-    """Modelo para registro de dispositivo."""
-
     device_id: str = Field(..., min_length=1, max_length=100)
     device_name: str = Field(..., min_length=1, max_length=200)
     location: str = Field(..., min_length=1, max_length=200)
@@ -53,16 +46,12 @@ class DeviceRegistrationRequest(BaseModel):
 
 
 class DeviceStatusUpdate(BaseModel):
-    """Modelo para atualização de status do dispositivo."""
-
     status: str = Field(..., pattern="^(online|offline|maintenance|error)$")
     last_seen: Optional[datetime] = None
     additional_data: Optional[Dict[str, Any]] = None
 
 
 class DeviceConfigUpdate(BaseModel):
-    """Modelo para atualização de configuração do dispositivo."""
-
     capture_interval: Optional[int] = Field(None, ge=30, le=3600)
     image_quality: Optional[int] = Field(None, ge=50, le=100)
     auto_upload: Optional[bool] = None
@@ -71,8 +60,6 @@ class DeviceConfigUpdate(BaseModel):
 
 
 class DeviceResponse(BaseModel):
-    """Modelo de resposta para dispositivo."""
-
     device_id: str
     device_name: str
     location: str
@@ -88,8 +75,6 @@ class DeviceResponse(BaseModel):
 
 
 class ImageUploadProcessRequest(BaseModel):
-    """Modelo para solicitação de upload e processamento de imagem via URL."""
-
     image_url: HttpUrl
     filename: str
     user_id: str
@@ -98,8 +83,6 @@ class ImageUploadProcessRequest(BaseModel):
 
 
 class ProcessingJobResponse(BaseModel):
-    """Modelo de resposta para job de processamento."""
-
     request_id: str
     image_url: str
     status: str
@@ -109,17 +92,13 @@ class ProcessingJobResponse(BaseModel):
 
 
 class DeviceListFilter(BaseModel):
-    """Modelo para filtros de listagem de dispositivos."""
-
     status: Optional[str] = Field(None, pattern="^(online|offline|pending|maintenance|error)$")
     location: Optional[str] = None
     device_type: Optional[str] = None
-    last_seen_hours: Optional[int] = Field(None, ge=1, le=168)  # Últimas N horas
+    last_seen_hours: Optional[int] = Field(None, ge=1, le=168)
 
 
 class DeviceStatsResponse(BaseModel):
-    """Modelo de resposta para estatísticas do dispositivo."""
-
     device_id: str
     device_name: str
     period_days: int
@@ -131,8 +110,6 @@ class DeviceStatsResponse(BaseModel):
 
 
 class DeviceCaptureHistory(BaseModel):
-    """Modelo para histórico de capturas do dispositivo."""
-
     capture_id: str
     device_id: str
     image_url: str
@@ -144,8 +121,6 @@ class DeviceCaptureHistory(BaseModel):
 
 
 class GlobalConfigRequest(BaseModel):
-    """Modelo para configurações globais do sistema."""
-
     heartbeat_timeout: int = Field(120, ge=30, le=600)
     check_interval: int = Field(60, ge=10, le=300)
     processing_timeout: int = Field(30, ge=10, le=120)
@@ -157,8 +132,6 @@ class GlobalConfigRequest(BaseModel):
 
 
 class DeviceSetupResponse(BaseModel):
-    """Modelo de resposta para configuração de dispositivo."""
-
     device_id: str
     config_script: str
     install_commands: List[str]
@@ -167,8 +140,6 @@ class DeviceSetupResponse(BaseModel):
 
 
 class DeviceDashboardResponse(BaseModel):
-    """Modelo de resposta para dashboard de dispositivos."""
-
     total_devices: int
     online_devices: int
     offline_devices: int
@@ -182,8 +153,6 @@ class DeviceDashboardResponse(BaseModel):
 
 
 class DeviceActivityResponse(BaseModel):
-    """Modelo de resposta para atividade de dispositivo."""
-
     activity_id: str
     device_id: str
     device_name: str
@@ -195,8 +164,6 @@ class DeviceActivityResponse(BaseModel):
 
 
 class DeviceAlertRequest(BaseModel):
-    """Modelo para alertas de dispositivos."""
-
     device_id: str
     alert_type: str = Field(..., pattern="^(offline|error|maintenance|low_disk|high_temp)$")
     severity: str = Field("medium", pattern="^(low|medium|high|critical)$")
@@ -205,8 +172,6 @@ class DeviceAlertRequest(BaseModel):
 
 
 class DeviceMaintenanceRequest(BaseModel):
-    """Modelo para solicitação de manutenção."""
-
     device_id: str
     maintenance_type: str = Field(..., pattern="^(scheduled|emergency|preventive|corrective)$")
     description: str
@@ -215,8 +180,6 @@ class DeviceMaintenanceRequest(BaseModel):
 
 
 class BulkDeviceAction(BaseModel):
-    """Modelo para ações em lote nos dispositivos."""
-
     device_ids: List[str] = Field(..., min_length=1, max_length=50)
     action: str = Field(..., pattern="^(update_config|restart|maintenance|delete)$")
     parameters: Optional[Dict[str, Any]] = None

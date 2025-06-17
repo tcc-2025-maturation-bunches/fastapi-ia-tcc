@@ -175,7 +175,6 @@ class CombinedProcessingUseCase:
             raise
 
     async def get_combined_result(self, image_id: str) -> Optional[CombinedResult]:
-        """Recupera resultado combinado por image_id."""
         try:
             return await self.dynamo_repository.get_combined_result(image_id)
         except Exception as e:
@@ -220,7 +219,6 @@ class CombinedProcessingUseCase:
             raise
 
     async def get_processing_status(self, request_id: str) -> Optional[ProcessingStatusResponse]:
-        """Recupera status do processamento."""
         status_data = await self._get_processing_status_data(request_id)
         if not status_data:
             return None
@@ -233,7 +231,6 @@ class CombinedProcessingUseCase:
         )
 
     async def _save_processing_status(self, request_id: str, status_data: Dict[str, Any]) -> None:
-        """Salva o status de processamento no DynamoDB."""
         try:
             status_data["pk"] = f"PROCESSING#{request_id}"
             status_data["sk"] = "STATUS"
@@ -247,7 +244,6 @@ class CombinedProcessingUseCase:
             raise
 
     async def _get_processing_status_data(self, request_id: str) -> Optional[Dict[str, Any]]:
-        """Recupera o status de processamento do DynamoDB."""
         try:
             key = {"pk": f"PROCESSING#{request_id}", "sk": "STATUS"}
             return await self.dynamo_repository.get_item(key)
@@ -256,7 +252,6 @@ class CombinedProcessingUseCase:
             return None
 
     async def _update_processing_status(self, request_id: str, **kwargs) -> None:
-        """Atualiza o status de processamento no DynamoDB."""
         try:
             status_data = await self._get_processing_status_data(request_id)
             if not status_data:

@@ -71,8 +71,6 @@ __all__ = [
 
 
 class ProcessImageRequest(BaseModel):
-    """Modelo para solicitação de processamento de imagem."""
-
     image_url: HttpUrl
     user_id: str
     model_type: ModelType
@@ -80,8 +78,6 @@ class ProcessImageRequest(BaseModel):
 
 
 class ProcessingResponse(BaseModel):
-    """Modelo para resposta de processamento de imagem."""
-
     request_id: str
     image_id: str
     model_type: str
@@ -94,24 +90,18 @@ class ProcessingResponse(BaseModel):
 
 
 class PresignedUrlRequest(BaseModel):
-    """Modelo para solicitação de URL pré-assinada para upload."""
-
     filename: str
     content_type: str
     user_id: str
 
 
 class PresignedUrlResponse(BaseModel):
-    """Modelo para resposta com URL pré-assinada para upload."""
-
     upload_url: HttpUrl
     image_id: str
     expires_in_seconds: int
 
 
 class ProcessingStatusResponse(BaseModel):
-    """Modelo para resposta de status de processamento."""
-
     request_id: str
     status: str  # "queued", "processing", "detecting", "detecting_maturation", "completed", "error"
     progress: Optional[float] = Field(None, ge=0.0, le=1.0)

@@ -4,8 +4,6 @@ from pydantic import BaseModel
 
 
 class ServiceStatusResponse(BaseModel):
-    """Modelo para resposta de status de um serviço específico."""
-
     service_name: str
     endpoint: str
     status: str
@@ -15,8 +13,6 @@ class ServiceStatusResponse(BaseModel):
 
 
 class HealthCheckResponse(BaseModel):
-    """Modelo para resposta de verificação de saúde completa do sistema."""
-
     status: str
     timestamp: str
     environment: str

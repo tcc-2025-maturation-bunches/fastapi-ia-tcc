@@ -37,28 +37,3 @@ class EC2Client:
         except Exception as e:
             logger.error(f"Erro inesperado ao processar requisição: {e}")
             return {"status": "error", "error_message": f"Erro inesperado: {str(e)}"}
-
-    async def detect_objects(
-        self, image_url: str, result_upload_url: str, metadata: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        payload = {"image_url": image_url, "result_upload_url": result_upload_url, "metadata": metadata or {}}
-
-        logger.info(f"Enviando solicitação de detecção para imagem: {image_url}")
-        return await self._make_request(self.detect_endpoint, payload)
-
-    async def process_combined(
-        self,
-        image_url: str,
-        result_upload_url: str,
-        maturation_threshold: float = 0.6,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        payload = {
-            "image_url": image_url,
-            "result_upload_url": result_upload_url,
-            "maturation_threshold": maturation_threshold,
-            "metadata": metadata or {},
-        }
-
-        logger.info(f"Enviando solicitação de processamento combinado para imagem: {image_url}")
-        return await self._make_request(self.combined_endpoint, payload)

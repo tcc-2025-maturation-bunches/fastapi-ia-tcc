@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 class S3Client:
-    """Cliente para interação com o Amazon S3."""
 
     def __init__(self, bucket_name: str, region: Optional[str] = None):
         self.bucket_name = bucket_name
@@ -23,17 +22,6 @@ class S3Client:
     async def generate_presigned_url(
         self, key: str, content_type: str, expires_in: timedelta = timedelta(minutes=15)
     ) -> Dict[str, Any]:
-        """
-        Gera uma URL pré-assinada para upload direto para o S3.
-
-        Args:
-            key: Caminho do objeto no bucket
-            content_type: Tipo de conteúdo do arquivo
-            expires_in: Tempo de expiração da URL
-
-        Returns:
-            Dict: Dados da URL pré-assinada incluindo a URL e o tempo de expiração
-        """
         try:
             expires_seconds = int(expires_in.total_seconds())
 
@@ -63,18 +51,6 @@ class S3Client:
         content_type: Optional[str] = None,
         metadata: Optional[Dict[str, str]] = None,
     ) -> str:
-        """
-        Faz upload de um arquivo para o S3.
-
-        Args:
-            file_obj: Objeto do arquivo
-            key: Caminho do objeto no bucket
-            content_type: Tipo de conteúdo do arquivo
-            metadata: Metadados do arquivo
-
-        Returns:
-            str: URL do arquivo no S3
-        """
         try:
             if not content_type:
                 content_type, _ = mimetypes.guess_type(key)
@@ -94,27 +70,9 @@ class S3Client:
             raise
 
     async def get_file_url(self, key: str) -> str:
-        """
-        Obtém a URL de um arquivo no S3.
-
-        Args:
-            key: Caminho do objeto no bucket
-
-        Returns:
-            str: URL do arquivo no S3
-        """
         return f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com/{key}"
 
     async def delete_file(self, key: str) -> bool:
-        """
-        Exclui um arquivo do S3.
-
-        Args:
-            key: Caminho do objeto no bucket
-
-        Returns:
-            bool: True se a exclusão foi bem-sucedida
-        """
         try:
             self.client.delete_object(Bucket=self.bucket_name, Key=key)
             return True

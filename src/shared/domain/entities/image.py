@@ -4,7 +4,6 @@ from uuid import uuid4
 
 
 class Image:
-    """Entidade que representa uma imagem para processamento."""
 
     def __init__(
         self,
@@ -21,7 +20,6 @@ class Image:
         self.upload_timestamp = upload_timestamp or datetime.now(timezone.utc)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Converte a entidade para dicionário."""
         return {
             "image_id": self.image_id,
             "image_url": self.image_url,
@@ -32,7 +30,6 @@ class Image:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Image":
-        """Cria uma instância a partir de um dicionário."""
         upload_timestamp = data.get("upload_timestamp")
         if upload_timestamp and isinstance(upload_timestamp, str):
             upload_timestamp = datetime.fromisoformat(upload_timestamp)
