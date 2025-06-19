@@ -9,8 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 class EC2Client:
-    """Cliente para comunicação com a API de IA em EC2."""
-
     def __init__(self, base_url: Optional[str] = None, timeout: Optional[int] = None):
         self.base_url = base_url or settings.EC2_IA_ENDPOINT
         self.timeout = timeout or settings.REQUEST_TIMEOUT
@@ -37,3 +35,20 @@ class EC2Client:
         except Exception as e:
             logger.error(f"Erro inesperado ao processar requisição: {e}")
             return {"status": "error", "error_message": f"Erro inesperado: {str(e)}"}
+
+    async def process_combined(
+        self,
+        image_url: str,
+        result_upload_url: str,
+        maturation_threshold: float = 0.6,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        payload = {
+            "image_url": image_url,
+            "result_upload_url": result_upload_url,
+            "maturation_threshold": maturation_threshold,
+            "metadata": metadata or {},
+        }
+
+        logger.info(f"Enviando solicitação de processamento combinado para imagem: {image_url}")
+        return await self._make_request(self.combined_endpoint, payload)
