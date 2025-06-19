@@ -231,6 +231,9 @@ class DynamoClient:
         except ClientError as e:
             logger.error(f"Erro ao obter informações da tabela: {e}")
             return {}
+        except Exception as e:
+            logger.error(f"Erro inesperado ao obter informações da tabela: {e}")
+            return {}
 
     async def scan(
         self,
