@@ -6,16 +6,12 @@ from src.shared.domain.models.base_models import ContractDetectionSummary, Matur
 
 
 class CombinedProcessingRequest(BaseModel):
-    """Modelo para solicitação de processamento combinado (detecção + maturação)."""
-
     image_url: HttpUrl
-    result_upload_url: Optional[HttpUrl] = None  # Se não fornecida, gera internamente
+    result_upload_url: Optional[HttpUrl] = None
     metadata: Dict[str, Any]
 
 
 class ProcessingConfig(BaseModel):
-    """Configurações para processamento de imagens."""
-
     min_detection_confidence: float = Field(0.6, ge=0.0, le=1.0)
     min_maturation_confidence: float = Field(0.7, ge=0.0, le=1.0)
     enable_auto_maturation: bool = True

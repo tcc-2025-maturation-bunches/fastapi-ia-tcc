@@ -6,8 +6,6 @@ from src.shared.domain.enums.ia_model_type_enum import ModelType
 
 
 class DetectionResult:
-    """Classe que representa o resultado de uma detecção de objeto."""
-
     def __init__(
         self,
         class_name: str,
@@ -17,11 +15,10 @@ class DetectionResult:
     ):
         self.class_name = class_name
         self.confidence = confidence
-        self.bounding_box = bounding_box  # [x, y, width, height] normalizado de 0 a 1
+        self.bounding_box = bounding_box
         self.maturation_level = maturation_level
 
     def to_dict(self) -> Dict[str, Any]:
-        """Converte a entidade para dicionário."""
         return {
             "class_name": self.class_name,
             "confidence": self.confidence,
@@ -31,7 +28,6 @@ class DetectionResult:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DetectionResult":
-        """Cria uma instância a partir de um dicionário."""
         return cls(
             class_name=data["class_name"],
             confidence=data["confidence"],
@@ -41,8 +37,6 @@ class DetectionResult:
 
 
 class ProcessingResult:
-    """Classe que representa o resultado completo de um processamento de imagem."""
-
     def __init__(
         self,
         image_id: str,
@@ -68,7 +62,6 @@ class ProcessingResult:
         self.parent_request_id = parent_request_id
 
     def to_dict(self) -> Dict[str, Any]:
-        """Converte a entidade para dicionário."""
         result_dict = {
             "request_id": self.request_id,
             "image_id": self.image_id,
@@ -88,7 +81,6 @@ class ProcessingResult:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ProcessingResult":
-        """Cria uma instância a partir de um dicionário."""
         processing_timestamp = data.get("processing_timestamp")
         if processing_timestamp and isinstance(processing_timestamp, str):
             processing_timestamp = datetime.fromisoformat(processing_timestamp)

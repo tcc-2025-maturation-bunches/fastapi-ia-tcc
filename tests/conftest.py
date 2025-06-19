@@ -69,8 +69,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from src.app.main import app  # noqa: E402
 from src.shared.domain.entities.combined_result import CombinedResult  # noqa: E402
 from src.shared.domain.entities.image import Image  # noqa: E402
-from src.shared.domain.entities.result import DetectionResult, ProcessingResult  # noqa: E402
-from src.shared.domain.enums.ia_model_type_enum import ModelType  # noqa: E402
 from src.shared.domain.models.base_models import ProcessingMetadata  # noqa: E402
 from src.shared.domain.models.combined_models import (  # noqa: E402
     ContractDetection,
@@ -169,23 +167,6 @@ def sample_combined_result_entity(sample_ec2_combined_response):
         image_result_url=data["image_result_url"],
         processing_time_ms=data["processing_time_ms"],
         processing_metadata=processing_metadata,
-    )
-
-
-@pytest.fixture
-def sample_processing_result_combined(sample_ec2_combined_response):
-    """Cria uma instância da entidade ProcessingResult para testes de endpoints legados."""
-    detection_data = sample_ec2_combined_response["detection"]
-    results = [DetectionResult.from_dict(res) for res in detection_data["results"]]
-
-    return ProcessingResult(
-        image_id="img-456",
-        model_type=ModelType.COMBINED,
-        results=results,
-        status=sample_ec2_combined_response["status"],
-        request_id=sample_ec2_combined_response["request_id"],
-        summary=detection_data["summary"],
-        image_result_url=sample_ec2_combined_response["image_result_url"],
     )
 
 

@@ -9,7 +9,6 @@ from fastapi.responses import JSONResponse
 
 from src.modules.device_monitoring.controller.device_controller import monitoring_router
 from src.modules.ia_integration.controller.combined_controller import combined_router
-from src.modules.ia_integration.controller.ia_controller import ia_router
 from src.modules.status.controller.status_controller import status_router
 from src.modules.storage.controller.storage_controller import storage_router
 from src.shared.domain.exception.processing_exceptions import PartialProcessingError
@@ -36,7 +35,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configuração de CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -45,7 +43,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(ia_router)
 app.include_router(combined_router)
 app.include_router(monitoring_router)
 app.include_router(storage_router)

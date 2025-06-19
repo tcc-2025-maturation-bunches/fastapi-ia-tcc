@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 
 class ImageUploadUseCase:
-    """Caso de uso para upload de imagens."""
 
     def __init__(
         self,

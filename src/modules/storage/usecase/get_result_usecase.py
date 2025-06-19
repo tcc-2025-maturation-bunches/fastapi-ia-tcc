@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from src.modules.storage.repo.dynamo_repository import DynamoRepository
@@ -12,7 +13,6 @@ class GetResultUseCase:
         self.dynamo_repository = dynamo_repository or DynamoRepository()
 
     async def get_by_request_id(self, request_id: str) -> Optional[ProcessingResult]:
-        """Recupera resultado por request_id."""
         try:
             logger.info(f"Recuperando resultado para request_id: {request_id}")
             return await self.dynamo_repository.get_result_by_request_id(request_id)
@@ -21,7 +21,6 @@ class GetResultUseCase:
             raise
 
     async def get_by_image_id(self, image_id: str) -> List[ProcessingResult]:
-        """Recupera todos os resultados para uma imagem."""
         try:
             logger.info(f"Recuperando resultados para image_id: {image_id}")
             return await self.dynamo_repository.get_results_by_image_id(image_id)
@@ -30,7 +29,6 @@ class GetResultUseCase:
             raise
 
     async def get_by_user_id(self, user_id: str, limit: int = 10) -> List[ProcessingResult]:
-        """Recupera resultados por user_id."""
         try:
             logger.info(f"Recuperando resultados para user_id: {user_id}")
             return await self.dynamo_repository.get_results_by_user_id(user_id, limit)
@@ -41,21 +39,6 @@ class GetResultUseCase:
     async def get_all_results(
         self, limit: int = 50, last_evaluated_key: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """
-        Recupera todos os resultados de inferência de IA usando o GSI EntityTypeIndex.
-
-        Esta função busca tanto resultados do tipo RESULT quanto COMBINED_RESULT,
-        implementando paginação eficiente para evitar scans custosos.
-
-        Args:
-            limit: Número máximo de resultados a retornar
-            last_evaluated_key: Chave para continuar paginação
-
-        Returns:
-            Dict contendo:
-            - items: Lista de resultados de inferência
-            - last_evaluated_key: Chave para próxima página (se houver)
-        """
         try:
             logger.info(f"Recuperando todos os resultados de inferência (limit: {limit})")
 
@@ -78,15 +61,6 @@ class GetResultUseCase:
             raise
 
     async def get_results_summary(self, days: int = 7) -> Dict[str, Any]:
-        """
-        Recupera um resumo dos resultados de inferência dos últimos N dias.
-
-        Args:
-            days: Número de dias para incluir no resumo
-
-        Returns:
-            Dict com estatísticas resumidas dos resultados
-        """
         try:
             from datetime import datetime, timedelta, timezone
 
@@ -168,50 +142,37 @@ class GetResultUseCase:
             logger.exception(f"Erro ao gerar resumo dos resultados: {e}")
             raise
 
-    async def search_results(
+    async def get_all_results_with_filters(
         self,
         user_id: Optional[str] = None,
         status: Optional[str] = None,
-        entity_type: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
-        """
-        Busca resultados com filtros específicos.
-
-        Args:
-            user_id: Filtrar por usuário específico
-            status: Filtrar por status (success, error, etc.)
-            entity_type: Filtrar por tipo (RESULT, COMBINED_RESULT)
-            limit: Número máximo de resultados
-
-        Returns:
-            Lista de resultados que atendem aos critérios
-        """
+        last_evaluated_key: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         try:
-            logger.info(f"Buscando resultados - user_id: {user_id}, status: {status}, type: {entity_type}")
+            logger.info(
+                f"Recuperando resultados com filtros - user_id: {user_id}, "
+                f"status: {status}, dates: {start_date} to {end_date}"
+            )
 
-            response = await self.get_all_results(limit=limit * 2)
+            response = await self.dynamo_repository.query_results_with_filters(
+                user_id=user_id,
+                status=status,
+                start_date=start_date,
+                end_date=end_date,
+                limit=limit,
+                last_evaluated_key=last_evaluated_key,
+            )
+
             items = response.get("items", [])
+            next_key = response.get("last_evaluated_key")
 
-            filtered_items = []
-            for item in items:
-                if user_id and item.get("user_id") != user_id:
-                    continue
+            logger.info(f"Recuperados {len(items)} resultados")
 
-                if status and item.get("status") != status:
-                    continue
-
-                if entity_type and item.get("entity_type") != entity_type:
-                    continue
-
-                filtered_items.append(item)
-
-                if len(filtered_items) >= limit:
-                    break
-
-            logger.info(f"Retornando {len(filtered_items)} resultados filtrados")
-            return filtered_items
+            return {"items": items, "last_evaluated_key": next_key}
 
         except Exception as e:
-            logger.exception(f"Erro ao buscar resultados com filtros: {e}")
+            logger.exception(f"Erro ao recuperar resultados com filtros: {e}")
             raise
