@@ -78,7 +78,12 @@ class S3Repository:
         content_type: Optional[str] = None,
         metadata: Optional[Dict[str, str]] = None,
     ) -> str:
-        result_key = original_key.replace(".jpg", f"_{result_type}.jpg")
+        ext = original_key.split(".")[-1].lower() if "." in original_key else "jpg"
+        if ext != "jpg":
+            logger.warning(f"Unexpected file extension '{ext}' in original_key: {original_key}. Defaulting to '.jpg'.")
+            ext = "jpg"
+        base_key = original_key.rsplit(".", 1)[0] if "." in original_key else original_key
+        result_key = f"{base_key}_{result_type}.{ext}"
 
         logger.info(f"Fazendo upload de imagem de resultado para o S3: {result_key}")
         return await self.results_client.upload_file(file_obj, result_key, content_type, metadata)
