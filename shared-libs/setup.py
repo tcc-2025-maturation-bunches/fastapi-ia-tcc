@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
     name="fruit-detection-shared",
@@ -6,7 +6,7 @@ setup(
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     install_requires=[
-        "boto3>=1.35.0",
+        "boto3>=1.38.17",
         "pydantic>=2.9.0",
         "python-dateutil>=2.9.0",
     ],
