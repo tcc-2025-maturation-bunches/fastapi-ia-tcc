@@ -36,10 +36,7 @@ class CombinedProcessingRequest(BaseModel):
     metadata: ProcessingMetadata
     maturation_threshold: float = Field(0.6, ge=0.0, le=1.0)
 
-    @field_validator("user_id")
-    @classmethod
-    def validate_user_id_field(cls, v):
-        return validate_user_id(v)
+    # Removed: user_id validation moved to ProcessingMetadata
 
     @model_validator(mode="after")
     def validate_full_metadata(self):
