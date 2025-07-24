@@ -163,7 +163,8 @@ class DynamoClient:
     ) -> Dict[str, Any]:
         try:
             query_kwargs = {
-                "KeyConditionExpression": f"{key_name} = :key_value",
+                "KeyConditionExpression": "#key_name = :key_value",
+                "ExpressionAttributeNames": {"#key_name": key_name},
                 "ExpressionAttributeValues": {":key_value": key_value},
                 "ScanIndexForward": scan_index_forward,
             }
