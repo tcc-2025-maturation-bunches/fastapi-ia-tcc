@@ -127,8 +127,9 @@ class DynamoClient:
     ) -> List[Dict[str, Any]]:
         try:
             query_kwargs = {
-                "KeyConditionExpression": f"{key_name} = :value",
+                "KeyConditionExpression": "#key_name = :value",
                 "ExpressionAttributeValues": {":value": key_value},
+                "ExpressionAttributeNames": {"#key_name": key_name},
                 "ScanIndexForward": scan_index_forward,
             }
 
