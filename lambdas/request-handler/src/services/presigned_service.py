@@ -30,7 +30,8 @@ class PresignedURLService:
             unique_id = key.split("/")[-1].split(".")[0]
             expiry_seconds = settings.PRESIGNED_URL_EXPIRY_MINUTES * 60
 
-            presigned_url = self.s3_client.generate_presigned_url(
+            client = self.images_client if purpose == "image" else self.results_client
+            presigned_url = client.generate_presigned_url(
                 "put_object",
                 Params={
                     "Bucket": bucket,
