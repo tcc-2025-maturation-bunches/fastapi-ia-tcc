@@ -40,7 +40,7 @@ class CombinedProcessingRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_full_metadata(self):
-        validate_image_metadata(self.model_dump())
+        validate_image_metadata(self.metadata.model_dump())
         return self
 
     @field_validator("image_url")
