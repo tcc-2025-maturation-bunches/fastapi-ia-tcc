@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 
 from botocore.exceptions import ClientError
 from shared_libs.src.infra.external.sqs.sqs_client import SQSClient
-from utils.validators import validate_request_id, validate_user_id
+from src.utils.validators import validate_request_id, validate_user_id
 
 from app.config import settings
 

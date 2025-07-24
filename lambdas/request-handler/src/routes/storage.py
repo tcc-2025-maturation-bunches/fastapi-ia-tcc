@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 from services.presigned_service import PresignedURLService
-from utils.validators import validate_user_id
+from src.utils.validators import validate_user_id
 
 from app.config import settings
 

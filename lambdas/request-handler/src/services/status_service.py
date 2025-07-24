@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 
 import boto3
 from botocore.exceptions import ClientError
-from utils.validators import validate_image_metadata, validate_request_id, validate_user_id
+from src.utils.validators import validate_image_metadata, validate_request_id, validate_user_id
 
 from app.config import settings
 
