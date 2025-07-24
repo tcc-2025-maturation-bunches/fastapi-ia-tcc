@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 from services.presigned_service import PresignedURLService
+from utils.validators import validate_user_id
 
 from app.config import settings
 
@@ -19,16 +20,8 @@ class PresignedURLRequest(BaseModel):
 
     @field_validator("filename")
     @classmethod
-    def validate_filename(cls, v):
-        if not v or v.strip() != v:
-            raise ValueError("Nome do arquivo não pode estar vazio ou conter espaços no início/fim")
-
-        invalid_chars = ["/", "\\", "..", "\0"]
-        for char in invalid_chars:
-            if char in v:
-                raise ValueError(f"Nome do arquivo contém caractere inválido: {char}")
-
-        return v
+    def validate_user_id_field(cls, v):
+        return validate_user_id(v)
 
     @field_validator("content_type")
     @classmethod

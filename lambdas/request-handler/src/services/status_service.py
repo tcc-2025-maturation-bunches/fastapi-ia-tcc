@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 
 import boto3
 from botocore.exceptions import ClientError
+from utils.validators import validate_image_metadata, validate_request_id, validate_user_id
 
 from app.config import settings
 
@@ -31,6 +32,9 @@ class StatusService:
         self, request_id: str, user_id: str, image_url: str, metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
         try:
+            validate_request_id(request_id)
+            validate_user_id(user_id)
+            validate_image_metadata(metadata)
             now = datetime.now(timezone.utc)
             ttl = int((now + timedelta(days=settings.DYNAMODB_TTL_DAYS)).timestamp())
 

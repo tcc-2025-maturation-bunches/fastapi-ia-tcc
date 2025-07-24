@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 
 from botocore.exceptions import ClientError
 from shared_libs.src.infra.external.sqs.sqs_client import SQSClient
+from utils.validators import validate_request_id, validate_user_id
 
 from app.config import settings
 
@@ -27,6 +28,8 @@ class QueueService:
         maturation_threshold: float = 0.6,
     ) -> Dict[str, Any]:
         try:
+            validate_user_id(user_id)
+            validate_request_id(request_id)
             message_body = {
                 "request_id": request_id,
                 "image_url": image_url,

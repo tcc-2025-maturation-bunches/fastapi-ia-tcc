@@ -4,10 +4,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 from services.presigned_service import PresignedURLService
 from services.queue_service import QueueService
 from services.status_service import ProcessingStatus, StatusService
+from utils.validators import validate_image_metadata, validate_request_id, validate_user_id
 
 from app.config import settings
 
@@ -34,6 +35,16 @@ class CombinedProcessingRequest(BaseModel):
     result_upload_url: Optional[HttpUrl] = None
     metadata: ProcessingMetadata
     maturation_threshold: float = Field(0.6, ge=0.0, le=1.0)
+
+    @field_validator("user_id")
+    @classmethod
+    def validate_user_id_field(cls, v):
+        return validate_user_id(v)
+
+    @model_validator(mode="after")
+    def validate_full_metadata(self):
+        validate_image_metadata(self.model_dump())
+        return self
 
     @field_validator("image_url")
     @classmethod
@@ -73,8 +84,9 @@ class StatusResponse(BaseModel):
 )
 async def process_combined(request: CombinedProcessingRequest):
     try:
+        validate_image_metadata(request.metadata.model_dump())
         request_id = f"req-{uuid.uuid4().hex[:12]}"
-
+        validate_request_id(request_id)
         logger.info(f"Solicitação de processamento {request_id} para usuário {request.metadata.user_id}")
 
         queue_service = QueueService()
@@ -138,6 +150,7 @@ async def process_combined(request: CombinedProcessingRequest):
 )
 async def get_processing_status(request_id: str):
     try:
+        validate_request_id(request_id)
         status_service = StatusService()
         status_data = await status_service.get_status(request_id)
 
@@ -181,6 +194,7 @@ async def get_user_requests(
     status_filter: Optional[str] = Query(None, description="Filtrar por status"),
 ):
     try:
+        validate_user_id(user_id)
         status_service = StatusService()
 
         status_enum = None
