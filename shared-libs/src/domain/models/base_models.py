@@ -46,11 +46,7 @@ class ColorAnalysis(BaseModel):
     brown_ratio: float
 
 
-class MaturationInfo(BaseModel):
-    score: float
-    category: str
-    estimated_days_until_spoilage: Optional[int] = None
-    color_analysis: Optional[ColorAnalysis] = None
+# Removed duplicate definition of MaturationInfo
 
 
 class ModelVersions(BaseModel):
