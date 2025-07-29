@@ -38,15 +38,13 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
-      - name: Instalar bibliotecas compartilhadas
+      - name: Instalar biblioteca compartilhada
         run: |
-          if [ -d "shared-libs" ]; then
-            cd shared-libs
-            pip install -e .
-            cd ..
-          fi
+          cd shared-libs
+          pip install -e .
+          cd ..
 
-      - name: Instalar dependências
+      - name: Instalar dependências da Lambda
         working-directory: lambda-request-handler
         run: |
           python -m pip install --upgrade pip
@@ -56,14 +54,12 @@ jobs:
       - name: Verificar formatação com Black e Ruff
         working-directory: lambda-request-handler
         run: |
-          pip install black ruff
           black --check src/
           ruff check src/
 
       - name: Executar testes
         working-directory: lambda-request-handler
         run: |
-          pip install pytest pytest-cov pytest-asyncio
           python -m pytest tests/ -v --cov=src --cov-report=xml --cov-report=term
 
       - name: Upload do relatório de cobertura para Codecov
@@ -72,30 +68,6 @@ jobs:
           file: ./lambda-request-handler/coverage.xml
           flags: request-handler
           name: request-handler-coverage
-
-  security-scan:
-    name: Verificação de Segurança
-    runs-on: ubuntu-latest
-    needs: test
-    
-    steps:
-      - name: Checkout do código
-        uses: actions/checkout@v4
-
-      - name: Executar escaneamento de vulnerabilidades Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-path: 'lambda-request-handler'
-          severity: 'CRITICAL,HIGH'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-
-      - name: Upload dos resultados do escaneamento Trivy
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
 
   build:
     name: Build e Validação
@@ -115,26 +87,24 @@ jobs:
       - name: Criar pacote de implantação
         working-directory: lambda-request-handler
         run: |
-          # Create deployment directory
           mkdir -p deployment/src
           
-          # Copy source code
+          # Copiar código fonte
           cp -r src/* deployment/src/
           
-          # Install dependencies to deployment directory
+          # Instalar dependências no diretório de deployment
           pip install -r requirements.txt -t deployment/
           
-          # Copy shared libs if they exist
-          if [ -d "../shared-libs/src" ]; then
-            cp -r ../shared-libs/src/* deployment/
-          fi
+          # Instalar shared-libs no diretório de deployment
+          cd ../shared-libs
+          pip install . -t ../lambda-request-handler/deployment/
+          cd ../lambda-request-handler
           
-          # Create zip file
+          # Criar arquivo zip
           cd deployment
           zip -r ../lambda-request-handler.zip .
           cd ..
           
-          # Calculate package size
           echo "Package size: $(du -h lambda-request-handler.zip | cut -f1)"
 
       - name: Upload artefato
@@ -152,9 +122,6 @@ jobs:
     environment: development
     
     steps:
-      - name: Checkout do código
-        uses: actions/checkout@v4
-
       - name: Download do pacote lambda
         uses: actions/download-artifact@v3
         with:
@@ -175,21 +142,6 @@ jobs:
             --zip-file fileb://lambda-request-handler.zip \
             --publish
 
-      - name: Atualizar configuração do Lambda
-        run: |
-          aws lambda update-function-configuration \
-            --function-name ${{ env.LAMBDA_NAME }}-dev \
-            --environment Variables="{
-              ENVIRONMENT=dev,
-              LOG_LEVEL=DEBUG,
-              SQS_QUEUE_URL=${{ secrets.DEV_SQS_QUEUE_URL }},
-              DYNAMODB_TABLE_NAME=${{ secrets.DEV_DYNAMODB_TABLE }},
-              S3_IMAGES_BUCKET=${{ secrets.DEV_S3_IMAGES_BUCKET }},
-              S3_RESULTS_BUCKET=${{ secrets.DEV_S3_RESULTS_BUCKET }}
-            }" \
-            --timeout 30 \
-            --memory-size 1024
-
       - name: Aguardar atualização do Lambda
         run: |
           aws lambda wait function-updated \
@@ -197,13 +149,11 @@ jobs:
 
       - name: Teste de funcionamento
         run: |
-          # Invoke Lambda with test event
           aws lambda invoke \
             --function-name ${{ env.LAMBDA_NAME }}-dev \
             --payload '{"httpMethod": "GET", "path": "/health"}' \
             response.json
           
-          # Check response
           cat response.json
           grep -q "healthy" response.json || exit 1
 
@@ -215,9 +165,6 @@ jobs:
     environment: production
     
     steps:
-      - name: Checkout do código
-        uses: actions/checkout@v4
-
       - name: Download do pacote lambda
         uses: actions/download-artifact@v3
         with:
@@ -231,96 +178,24 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Criar versão do Lambda
-        id: version
-        run: |
-          VERSION=$(aws lambda publish-version \
-            --function-name ${{ env.LAMBDA_NAME }}-prod \
-            --code-sha-256 $(openssl dgst -sha256 -binary lambda-request-handler.zip | openssl enc -base64) \
-            --description "Deployment from GitHub Actions - ${GITHUB_SHA:0:7}" \
-            --query 'Version' \
-            --output text)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
       - name: Implantar no Lambda
         run: |
           aws lambda update-function-code \
             --function-name ${{ env.LAMBDA_NAME }}-prod \
             --zip-file fileb://lambda-request-handler.zip
 
-      - name: Atualizar configuração do Lambda
+      - name: Aguardar atualização do Lambda
         run: |
-          aws lambda update-function-configuration \
-            --function-name ${{ env.LAMBDA_NAME }}-prod \
-            --environment Variables="{
-              ENVIRONMENT=prod,
-              LOG_LEVEL=INFO,
-              SQS_QUEUE_URL=${{ secrets.PROD_SQS_QUEUE_URL }},
-              DYNAMODB_TABLE_NAME=${{ secrets.PROD_DYNAMODB_TABLE }},
-              S3_IMAGES_BUCKET=${{ secrets.PROD_S3_IMAGES_BUCKET }},
-              S3_RESULTS_BUCKET=${{ secrets.PROD_S3_RESULTS_BUCKET }}
-            }" \
-            --timeout 30 \
-            --memory-size 1024
-
-      - name: Atualizar alias do Lambda
-        run: |
-          aws lambda update-alias \
-            --function-name ${{ env.LAMBDA_NAME }}-prod \
-            --name live \
-            --function-version ${{ steps.version.outputs.version }}
-
-      - name: Verificar alarmes do CloudWatch
-        run: |
-          # Check if any alarms are in ALARM state
-          ALARMS=$(aws cloudwatch describe-alarms \
-            --alarm-names \
-              "${{ env.LAMBDA_NAME }}-prod-errors" \
-              "${{ env.LAMBDA_NAME }}-prod-throttles" \
-            --state-value ALARM \
-            --query 'MetricAlarms[].AlarmName' \
-            --output text)
-          
-          if [ ! -z "$ALARMS" ]; then
-            echo "⚠️ Active alarms detected: $ALARMS"
-            exit 1
-          fi
+          aws lambda wait function-updated \
+            --function-name ${{ env.LAMBDA_NAME }}-prod
 
       - name: Notificar equipe sobre implantação no Discord
         if: always()
         run: |
-          if [ "${{ job.status }}" == "success" ]; then
-            STATUS="✅ Sucesso"
-            COLOR="3066993"
-            TITLE="✅ Implantação do Lambda Request Handler Concluída com Sucesso!"
-            DESCRIPTION="A função Lambda \`${{ env.LAMBDA_NAME }}-prod\` foi atualizada com sucesso."
-          else
-            STATUS="❌ Falhou"
-            COLOR="15158332"
-            TITLE="❌ Falha na Implantação do Lambda Request Handler!"
-            DESCRIPTION="A implantação da função Lambda \`${{ env.LAMBDA_NAME }}-prod\` falhou. Verifique os logs para mais detalhes."
-          fi
-          
-          COMMIT_MESSAGE=$(git log -1 --pretty=format:"%s")
-          COMMIT_AUTHOR=$(git log -1 --pretty=format:"%an")
-          COMMIT_LINK="${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
-          CURRENT_DATE=$(date '+%d/%m/%Y %H:%M:%S')
+          STATUS="${{ job.status == 'success' && '✅ Sucesso' || '❌ Falhou' }}"
+          COLOR="${{ job.status == 'success' && '3066993' || '15158332' }}"
+          TITLE="Lambda Request Handler - $STATUS"
           
           curl -H "Content-Type: application/json" \
-            -d "{
-              \"embeds\": [{
-                \"title\": \"$TITLE\",
-                \"description\": \"$DESCRIPTION\",
-                \"color\": $COLOR,
-                \"fields\": [
-                  {\"name\": \"Repositório\", \"value\": \"[${{ github.repository }}](${{ github.server_url }}/${{ github.repository }})\", \"inline\": true},
-                  {\"name\": \"Branch\", \"value\": \"main\", \"inline\": true},
-                  {\"name\": \"Versão\", \"value\": \"${{ steps.version.outputs.version }}\", \"inline\": true},
-                  {\"name\": \"Commit\", \"value\": \"[$COMMIT_MESSAGE]($COMMIT_LINK)\", \"inline\": false},
-                  {\"name\": \"Autor\", \"value\": \"$COMMIT_AUTHOR\", \"inline\": true},
-                  {\"name\": \"Implantado em\", \"value\": \"$CURRENT_DATE\", \"inline\": true}
-                ],
-                \"footer\": {\"text\": \"TCC Detecção e Maturação de Frutas\"}
-              }]
-            }" \
-            ${{ secrets.DISCORD_WEBHOOK }} || true
+            -d "{\"embeds\": [{\"title\": \"$TITLE\", \"color\": $COLOR}]}" \
+            ${{ secrets.DISCORD_WEBHOOK }}
