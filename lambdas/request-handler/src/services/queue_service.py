@@ -5,9 +5,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from botocore.exceptions import ClientError
-from shared_libs.src.infra.external.sqs.sqs_client import SQSClient
 from src.utils.validators import validate_request_id, validate_user_id
-
+from fruit_detection_shared.infra.external import SQSClient
 from app.config import settings
 
 logger = logging.getLogger(__name__)
