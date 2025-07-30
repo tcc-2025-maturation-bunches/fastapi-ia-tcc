@@ -1,0 +1,206 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Lambda Request Handler para Sistema de Detecção de Frutas
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - hml
+      - prod
+    Description: Ambiente de implantação
+  
+  SQSQueueURL:
+    Type: String
+    Description: URL da fila SQS de processamento
+  
+  DynamoDBTableName:
+    Type: String
+    Description: Nome da tabela DynamoDB de resultados
+  
+  S3ImagesBucket:
+    Type: String
+    Description: Bucket S3 para armazenamento de imagens
+  
+  S3ResultsBucket:
+    Type: String
+    Description: Bucket S3 para armazenamento de resultados
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: python3.9
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        LOG_LEVEL: INFO
+        AWS_REGION: !Ref AWS::Region
+
+Resources:
+  RequestHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub fruit-detection-${Environment}-request-handler
+      CodeUri: .
+      Handler: src.app.lambda_handler.lambda_handler
+      Runtime: python3.9
+      MemorySize: 1024
+      Timeout: 30
+      Tracing: Active
+      Environment:
+        Variables:
+          SQS_QUEUE_URL: !Ref SQSQueueURL
+          DYNAMODB_TABLE_NAME: !Ref DynamoDBTableName
+          S3_IMAGES_BUCKET: !Ref S3ImagesBucket
+          S3_RESULTS_BUCKET: !Ref S3ResultsBucket
+          PRESIGNED_URL_EXPIRY_MINUTES: 15
+          MIN_DETECTION_CONFIDENCE: 0.6
+          MIN_MATURATION_CONFIDENCE: 0.7
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            # SQS Permissions
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+                - sqs:GetQueueAttributes
+              Resource: !Sub arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:*
+            
+            # DynamoDB Permissions
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBTableName}
+                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBTableName}/index/*
+            
+            # S3 Permissions
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:PutObjectAcl
+                - s3:GetObject
+                - s3:HeadObject
+                - s3:HeadBucket
+              Resource:
+                - !Sub arn:aws:s3:::${S3ImagesBucket}/*
+                - !Sub arn:aws:s3:::${S3ResultsBucket}/*
+                - !Sub arn:aws:s3:::${S3ImagesBucket}
+                - !Sub arn:aws:s3:::${S3ResultsBucket}
+            
+            # CloudWatch Logs
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: '*'
+            
+            # X-Ray Tracing
+            - Effect: Allow
+              Action:
+                - xray:PutTraceSegments
+                - xray:PutTelemetryRecords
+              Resource: '*'
+      
+      Events:
+        ApiGateway:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            RestApiId: !Ref ApiGateway
+
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub fruit-detection-${Environment}-request-handler-api
+      StageName: !Ref Environment
+      TracingEnabled: true
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+      DefinitionBody:
+        openapi: '3.0.1'
+        info:
+          title: Request Handler API
+          version: '1.0'
+        paths:
+          /{proxy+}:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RequestHandlerFunction.Arn}/invocations
+                passthroughBehavior: when_no_match
+                httpMethod: POST
+                type: aws_proxy
+              responses: {}
+
+  # CloudWatch Log Group
+  RequestHandlerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${RequestHandlerFunction}
+      RetentionInDays: 7
+
+  # CloudWatch Alarms
+  RequestHandlerErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub fruit-detection-${Environment}-request-handler-errors
+      AlarmDescription: Dispara quando a Lambda Request Handler apresenta erros
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref RequestHandlerFunction
+      TreatMissingData: notBreaching
+
+  RequestHandlerThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub fruit-detection-${Environment}-request-handler-throttles
+      AlarmDescription: Dispara quando a Lambda Request Handler está sendo limitada
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref RequestHandlerFunction
+      TreatMissingData: notBreaching
+
+Outputs:
+  RequestHandlerFunctionArn:
+    Description: ARN da função Lambda Request Handler
+    Value: !GetAtt RequestHandlerFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-RequestHandlerFunctionArn
+  
+  ApiGatewayUrl:
+    Description: URL do endpoint API Gateway
+    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
+    Export:
+      Name: !Sub ${AWS::StackName}-ApiGatewayUrl
+  
+  ApiGatewayId:
+    Description: ID do API Gateway
+    Value: !Ref ApiGateway
+    Export:
+      Name: !Sub ${AWS::StackName}-ApiGatewayId

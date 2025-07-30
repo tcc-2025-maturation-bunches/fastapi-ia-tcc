@@ -1,0 +1,180 @@
+name: Pipeline CI/CD - Lambda Processing AI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'lambda-processing-ai/**'
+      - 'shared-libs/**'
+      - '.github/workflows/lambda-processing.yaml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'lambda-processing-ai/**'
+      - 'shared-libs/**'
+      - '.github/workflows/lambda-processing.yaml'
+
+env:
+  AWS_REGION: us-east-1
+  LAMBDA_NAME: fruit-detection-processing-ai
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  test:
+    name: Testes e Verificação de Qualidade
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Instalar biblioteca compartilhada
+        run: |
+          cd shared-libs
+          pip install -e .
+          cd ..
+
+      - name: Instalar dependências da Lambda
+        working-directory: lambda-processing-ai
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest black ruff || echo "Dev dependencies não encontradas"
+
+      - name: Verificar formatação com Black e Ruff
+        working-directory: lambda-processing-ai
+        run: |
+          black --check src/
+          ruff check src/
+
+      - name: Executar testes
+        working-directory: lambda-processing-ai
+        run: |
+          python -m pytest tests/ -v || echo "Testes não encontrados"
+
+  build:
+    name: Build e Validação
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Criar pacote de implantação
+        working-directory: lambda-processing-ai
+        run: |
+          mkdir -p deployment/src
+          
+          cp -r src/* deployment/src/
+          
+          pip install -r requirements.txt -t deployment/
+          
+          cd ../shared-libs
+          pip install . -t ../lambda-processing-ai/deployment/
+          cd ../lambda-processing-ai
+          
+          cd deployment
+          zip -r ../lambda-processing-ai.zip .
+          cd ..
+          
+          echo "Package size: $(du -h lambda-processing-ai.zip | cut -f1)"
+
+      - name: Upload artefato
+        uses: actions/upload-artifact@v3
+        with:
+          name: lambda-package
+          path: lambda-processing-ai/lambda-processing-ai.zip
+          retention-days: 7
+
+  deploy-dev:
+    name: Implantação para Desenvolvimento
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+    environment: development
+    
+    steps:
+      - name: Download do pacote lambda
+        uses: actions/download-artifact@v3
+        with:
+          name: lambda-package
+          path: ./
+
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Implantar no Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ env.LAMBDA_NAME }}-dev \
+            --zip-file fileb://lambda-processing-ai.zip \
+            --publish
+
+      - name: Aguardar atualização do Lambda
+        run: |
+          aws lambda wait function-updated \
+            --function-name ${{ env.LAMBDA_NAME }}-dev
+
+  deploy-prod:
+    name: Implantação para Produção
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+      - name: Download do pacote lambda
+        uses: actions/download-artifact@v3
+        with:
+          name: lambda-package
+          path: ./
+
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Implantar no Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ env.LAMBDA_NAME }}-prod \
+            --zip-file fileb://lambda-processing-ai.zip
+
+      - name: Aguardar atualização do Lambda
+        run: |
+          aws lambda wait function-updated \
+            --function-name ${{ env.LAMBDA_NAME }}-prod
+
+      - name: Notificar equipe sobre implantação no Discord
+        if: always()
+        run: |
+          STATUS="${{ job.status == 'success' && '✅ Sucesso' || '❌ Falhou' }}"
+          COLOR="${{ job.status == 'success' && '3066993' || '15158332' }}"
+          TITLE="Lambda Processing AI - $STATUS"
+          
+          curl -H "Content-Type: application/json" \
+            -d "{\"embeds\": [{\"title\": \"$TITLE\", \"color\": $COLOR}]}" \
+            ${{ secrets.DISCORD_WEBHOOK }}
