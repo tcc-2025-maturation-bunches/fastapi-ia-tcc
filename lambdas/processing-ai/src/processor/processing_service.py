@@ -2,11 +2,11 @@ import asyncio
 import logging
 from typing import Any, Dict
 
-from processor.repository.dynamo_repository import DynamoRepository
-from processor.repository.ia_repository import IARepository
-from processor.usecase.combined_processing_usecase import CombinedProcessingUseCase
-from processor.utils.error_handler import ErrorHandler, ProcessingError
-from processor.utils.retry_handler import retry_on_failure
+from src.processor.repository.dynamo_repository import DynamoRepository
+from src.processor.repository.ia_repository import IARepository
+from src.processor.usecase.combined_processing_usecase import CombinedProcessingUseCase
+from src.processor.utils.error_handler import ErrorHandler, ProcessingError
+from src.processor.utils.retry_handler import retry_on_failure
 
 logger = logging.getLogger(__name__)
 

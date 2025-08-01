@@ -32,7 +32,7 @@ Globals:
   Function:
     Timeout: 30
     MemorySize: 512
-    Runtime: python3.9
+    Runtime: python3.13
     Environment:
       Variables:
         ENVIRONMENT: !Ref Environment
@@ -46,7 +46,7 @@ Resources:
       FunctionName: !Sub fruit-detection-${Environment}-request-handler
       CodeUri: .
       Handler: src.app.lambda_handler.lambda_handler
-      Runtime: python3.9
+      Runtime: python3.13
       MemorySize: 1024
       Timeout: 30
       Tracing: Active

@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Lambda Request Handler para Sistema de Detecção de Frutas
+Description: Lambda Processing AI para Sistema de Detecção de Frutas
 
 Parameters:
   Environment:
@@ -27,12 +27,16 @@ Parameters:
   S3ResultsBucket:
     Type: String
     Description: Bucket S3 para armazenamento de resultados
+  
+  EC2IAEndpoint:
+    Type: String
+    Description: Endpoint do serviço de IA no EC2
 
 Globals:
   Function:
-    Timeout: 30
-    MemorySize: 512
-    Runtime: python3.9
+    Timeout: 300
+    MemorySize: 2048
+    Runtime: python3.13
     Environment:
       Variables:
         ENVIRONMENT: !Ref Environment
@@ -40,15 +44,15 @@ Globals:
         AWS_REGION: !Ref AWS::Region
 
 Resources:
-  RequestHandlerFunction:
+  ProcessingAIFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub fruit-detection-${Environment}-request-handler
+      FunctionName: !Sub fruit-detection-${Environment}-processing-ai
       CodeUri: .
       Handler: src.app.lambda_handler.lambda_handler
-      Runtime: python3.9
-      MemorySize: 1024
-      Timeout: 30
+      Runtime: python3.13
+      MemorySize: 2048
+      Timeout: 300
       Tracing: Active
       Environment:
         Variables:
@@ -56,46 +60,39 @@ Resources:
           DYNAMODB_TABLE_NAME: !Ref DynamoDBTableName
           S3_IMAGES_BUCKET: !Ref S3ImagesBucket
           S3_RESULTS_BUCKET: !Ref S3ResultsBucket
-          PRESIGNED_URL_EXPIRY_MINUTES: 15
+          EC2_IA_ENDPOINT: !Ref EC2IAEndpoint
+          REQUEST_TIMEOUT: 300
           MIN_DETECTION_CONFIDENCE: 0.6
           MIN_MATURATION_CONFIDENCE: 0.7
       Policies:
         - Version: '2012-10-17'
           Statement:
-            # SQS Permissions
             - Effect: Allow
               Action:
-                - sqs:SendMessage
+                - sqs:ReceiveMessage
+                - sqs:DeleteMessage
                 - sqs:GetQueueAttributes
               Resource: !Sub arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:*
             
-            # DynamoDB Permissions
             - Effect: Allow
               Action:
                 - dynamodb:PutItem
                 - dynamodb:GetItem
                 - dynamodb:UpdateItem
                 - dynamodb:Query
-                - dynamodb:Scan
               Resource:
                 - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBTableName}
                 - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBTableName}/index/*
             
-            # S3 Permissions
             - Effect: Allow
               Action:
                 - s3:PutObject
-                - s3:PutObjectAcl
                 - s3:GetObject
                 - s3:HeadObject
-                - s3:HeadBucket
               Resource:
                 - !Sub arn:aws:s3:::${S3ImagesBucket}/*
                 - !Sub arn:aws:s3:::${S3ResultsBucket}/*
-                - !Sub arn:aws:s3:::${S3ImagesBucket}
-                - !Sub arn:aws:s3:::${S3ResultsBucket}
             
-            # CloudWatch Logs
             - Effect: Allow
               Action:
                 - logs:CreateLogGroup
@@ -103,61 +100,48 @@ Resources:
                 - logs:PutLogEvents
               Resource: '*'
             
-            # X-Ray Tracing
             - Effect: Allow
               Action:
                 - xray:PutTraceSegments
                 - xray:PutTelemetryRecords
               Resource: '*'
-      
+
       Events:
-        ApiGateway:
-          Type: Api
+        SQSEvent:
+          Type: SQS
           Properties:
-            Path: /{proxy+}
-            Method: ANY
-            RestApiId: !Ref ApiGateway
+            Queue: !Ref SQSQueueURL
+            BatchSize: 1
+            MaximumBatchingWindowInSeconds: 5
 
-  ApiGateway:
-    Type: AWS::Serverless::Api
-    Properties:
-      Name: !Sub fruit-detection-${Environment}-request-handler-api
-      StageName: !Ref Environment
-      TracingEnabled: true
-      Cors:
-        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
-        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-        AllowOrigin: "'*'"
-      DefinitionBody:
-        openapi: '3.0.1'
-        info:
-          title: Request Handler API
-          version: '1.0'
-        paths:
-          /{proxy+}:
-            x-amazon-apigateway-any-method:
-              x-amazon-apigateway-integration:
-                uri:
-                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RequestHandlerFunction.Arn}/invocations
-                passthroughBehavior: when_no_match
-                httpMethod: POST
-                type: aws_proxy
-              responses: {}
-
-  # CloudWatch Log Group
-  RequestHandlerLogGroup:
+  ProcessingAILogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/lambda/${RequestHandlerFunction}
+      LogGroupName: !Sub /aws/lambda/${ProcessingAIFunction}
       RetentionInDays: 7
 
-  # CloudWatch Alarms
-  RequestHandlerErrorAlarm:
+  ProcessingAIErrorAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub fruit-detection-${Environment}-request-handler-errors
-      AlarmDescription: Dispara quando a Lambda Request Handler apresenta erros
+      AlarmName: !Sub fruit-detection-${Environment}-processing-ai-errors
+      AlarmDescription: Dispara quando a Lambda Processing AI apresenta erros
       MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ProcessingAIFunction
+
+  ProcessingAIThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub fruit-detection-${Environment}-processing-ai-throttles
+      AlarmDescription: Dispara quando a Lambda Processing AI está sendo limitada
+      MetricName: Throttles
       Namespace: AWS/Lambda
       Statistic: Sum
       Period: 300
@@ -166,41 +150,11 @@ Resources:
       ComparisonOperator: GreaterThanThreshold
       Dimensions:
         - Name: FunctionName
-          Value: !Ref RequestHandlerFunction
-      TreatMissingData: notBreaching
-
-  RequestHandlerThrottleAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub fruit-detection-${Environment}-request-handler-throttles
-      AlarmDescription: Dispara quando a Lambda Request Handler está sendo limitada
-      MetricName: Throttles
-      Namespace: AWS/Lambda
-      Statistic: Sum
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 10
-      ComparisonOperator: GreaterThanThreshold
-      Dimensions:
-        - Name: FunctionName
-          Value: !Ref RequestHandlerFunction
-      TreatMissingData: notBreaching
+          Value: !Ref ProcessingAIFunction
 
 Outputs:
-  RequestHandlerFunctionArn:
-    Description: ARN da função Lambda Request Handler
-    Value: !GetAtt RequestHandlerFunction.Arn
+  ProcessingAIFunctionArn:
+    Description: ARN da função Lambda Processing AI
+    Value: !GetAtt ProcessingAIFunction.Arn
     Export:
-      Name: !Sub ${AWS::StackName}-RequestHandlerFunctionArn
-  
-  ApiGatewayUrl:
-    Description: URL do endpoint API Gateway
-    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
-    Export:
-      Name: !Sub ${AWS::StackName}-ApiGatewayUrl
-  
-  ApiGatewayId:
-    Description: ID do API Gateway
-    Value: !Ref ApiGateway
-    Export:
-      Name: !Sub ${AWS::StackName}-ApiGatewayId
+      Name: !Sub ${AWS::StackName}-ProcessingAIFunctionArn

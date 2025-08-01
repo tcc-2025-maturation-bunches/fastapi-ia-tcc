@@ -2,8 +2,8 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from config import settings
-from processor.processing_service import ProcessingService
+from src.app.config import settings
+from src.processor.processing_service import ProcessingService
 
 logger = logging.getLogger()
 logger.setLevel(getattr(logging, settings.LOG_LEVEL))
