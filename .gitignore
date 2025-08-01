@@ -172,3 +172,8 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# SAM AWS
+.aws-sam/
+**/.aws-sam/
+samconfig.toml
