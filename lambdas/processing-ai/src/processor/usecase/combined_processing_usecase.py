@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional
 
 from fruit_detection_shared.domain.entities import Image
 from fruit_detection_shared.mappers import RequestSummaryMapper
+
 from src.processor.repository.dynamo_repository import DynamoRepository
 from src.processor.repository.ia_repository import IARepository
 

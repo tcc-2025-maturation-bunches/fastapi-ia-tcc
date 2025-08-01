@@ -8,9 +8,9 @@ from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 from services.presigned_service import PresignedURLService
 from services.queue_service import QueueService
 from services.status_service import ProcessingStatus, StatusService
-from src.utils.validators import validate_image_metadata, validate_request_id, validate_user_id
 
-from app.config import settings
+from src.app.config import settings
+from src.utils.validators import validate_image_metadata, validate_request_id, validate_user_id
 
 logger = logging.getLogger(__name__)
 

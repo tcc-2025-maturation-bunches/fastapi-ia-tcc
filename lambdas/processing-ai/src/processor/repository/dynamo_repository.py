@@ -2,8 +2,9 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from src.app.config import settings
 from fruit_detection_shared.infra.external import DynamoClient
+
+from src.app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +24,11 @@ class DynamoRepository:
     async def update_processing_status(self, request_id: str, status_data: Dict[str, Any]) -> None:
         try:
             key = {"pk": f"PROCESSING#{request_id}", "sk": "STATUS"}
-            
+
             update_expressions = []
             expression_values = {}
             expression_names = {}
-            
+
             for field, value in status_data.items():
                 if field == "status":
                     update_expressions.append("#status = :status")
@@ -36,18 +37,18 @@ class DynamoRepository:
                 else:
                     update_expressions.append(f"{field} = :{field}")
                     expression_values[f":{field}"] = value
-            
+
             update_expression = "SET " + ", ".join(update_expressions)
-            
+
             await self.dynamo_client.update_item(
                 key=key,
                 update_expression=update_expression,
                 expression_values=expression_values,
-                expression_names=expression_names if expression_names else None
+                expression_names=expression_names if expression_names else None,
             )
-            
+
             logger.debug(f"Status de processamento atualizado para {request_id}")
-            
+
         except Exception as e:
             logger.warning(f"Erro ao atualizar status de processamento para {request_id}: {e}")
 
@@ -65,7 +66,7 @@ class DynamoRepository:
                 "status": "completed",
                 "progress": 1.0,
                 "completed_at": datetime.now(timezone.utc).isoformat(),
-                **result_data
+                **result_data,
             }
             await self.update_processing_status(request_id, status_data)
         except Exception as e:
@@ -78,7 +79,7 @@ class DynamoRepository:
                 "progress": 1.0,
                 "error": error,
                 "error_code": error_code or "UNKNOWN_ERROR",
-                "failed_at": datetime.now(timezone.utc).isoformat()
+                "failed_at": datetime.now(timezone.utc).isoformat(),
             }
             await self.update_processing_status(request_id, status_data)
         except Exception as e:

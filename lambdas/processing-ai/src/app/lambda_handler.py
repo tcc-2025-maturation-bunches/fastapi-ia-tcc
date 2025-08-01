@@ -32,15 +32,17 @@ def lambda_handler(event, context):
                     results.append({"status": "error", "error": str(e)})
 
         logger.info(f"Processamento concluído. {len(results)} mensagens processadas")
-        
+
         return {
             "statusCode": 200,
-            "body": json.dumps({
-                "message": "Processamento concluído",
-                "processed_count": len(results),
-                "results": results,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            })
+            "body": json.dumps(
+                {
+                    "message": "Processamento concluído",
+                    "processed_count": len(results),
+                    "results": results,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            ),
         }
 
     except Exception as e:
@@ -48,10 +50,12 @@ def lambda_handler(event, context):
 
         return {
             "statusCode": 500,
-            "body": json.dumps({
-                "error": "Erro interno do servidor",
-                "message": str(e),
-                "requestId": context.request_id if context else None,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            })
+            "body": json.dumps(
+                {
+                    "error": "Erro interno do servidor",
+                    "message": str(e),
+                    "requestId": context.request_id if context else None,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            ),
         }

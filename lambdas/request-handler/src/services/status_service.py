@@ -5,9 +5,9 @@ from typing import Any, Dict, Optional
 
 import boto3
 from botocore.exceptions import ClientError
-from src.utils.validators import validate_image_metadata, validate_request_id, validate_user_id
 
-from app.config import settings
+from src.app.config import settings
+from src.utils.validators import validate_image_metadata, validate_request_id, validate_user_id
 
 logger = logging.getLogger(__name__)
 

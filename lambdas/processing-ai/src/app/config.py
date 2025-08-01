@@ -12,7 +12,7 @@ class Settings:
         self.SERVICE_VERSION = "1.0.0"
 
         self.SQS_QUEUE_URL = os.getenv("SQS_QUEUE_URL", "")
-        
+
         self.DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", f"fruit-detection-{self.ENVIRONMENT}-results")
         self.DYNAMODB_TTL_DAYS = int(os.getenv("DYNAMODB_TTL_DAYS", "30"))
 

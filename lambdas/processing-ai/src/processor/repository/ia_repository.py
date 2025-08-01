@@ -2,20 +2,23 @@ import logging
 from typing import Optional
 
 from fruit_detection_shared.domain.entities import CombinedResult, Image
-from fruit_detection_shared.domain.models import ContractDetection, ContractDetectionResult, ContractDetectionSummary, ProcessingMetadata
+from fruit_detection_shared.domain.models import (
+    ContractDetection,
+    ContractDetectionResult,
+    ContractDetectionSummary,
+    ProcessingMetadata,
+)
 from fruit_detection_shared.infra.external import EC2Client
 
 logger = logging.getLogger(__name__)
+
 
 class IARepository:
     def __init__(self, ec2_client: Optional[EC2Client] = None):
         self.ec2_client = ec2_client or EC2Client()
 
     async def process_combined(
-        self, 
-        image: Image, 
-        result_upload_url: Optional[str], 
-        maturation_threshold: float = 0.6
+        self, image: Image, result_upload_url: Optional[str], maturation_threshold: float = 0.6
     ) -> CombinedResult:
         try:
             metadata = {

@@ -4,19 +4,17 @@ PYTHON = python
 PYTEST = pytest
 BLACK = black
 RUFF = ruff
-ISORT = isort
 COVERAGE = coverage
-SRC_DIR = src
+SRC_DIR = lambdas
 TEST_DIR = tests
 PIP = pip
 
 format:
 	$(BLACK) $(SRC_DIR) $(TEST_DIR)
-	$(ISORT) $(SRC_DIR) $(TEST_DIR)
+	$(RUFF) check --fix $(SRC_DIR) $(TEST_DIR)
 
 check:
 	$(BLACK) --check $(SRC_DIR) $(TEST_DIR)
-	$(ISORT) --check $(SRC_DIR) $(TEST_DIR)
 	$(RUFF) check $(SRC_DIR) $(TEST_DIR)
 
 lint:
