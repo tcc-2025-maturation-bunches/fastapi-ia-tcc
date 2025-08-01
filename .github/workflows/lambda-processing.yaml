@@ -21,7 +21,7 @@ on:
 env:
   AWS_REGION: us-east-1
   LAMBDA_NAME: fruit-detection-processing-ai
-  PYTHON_VERSION: '3.9'
+  PYTHON_VERSION: '3.13'
 
 jobs:
   test:
