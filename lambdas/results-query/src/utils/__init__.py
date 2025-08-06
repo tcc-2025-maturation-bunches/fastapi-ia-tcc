@@ -3,6 +3,6 @@ Utils Module - Results Query Lambda
 Módulo de utilitários e validações
 """
 
-from .validators import validate_image_id, validate_request_id, validate_user_id
+from .validator import validate_image_id, validate_request_id, validate_user_id
 
 __all__ = ["validate_user_id", "validate_request_id", "validate_image_id"]

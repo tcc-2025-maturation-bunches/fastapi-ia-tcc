@@ -3,12 +3,12 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fruit_detection_shared.domain.models import CombinedContractResponse
+from utils.validator import validate_request_id, validate_user_id
 
 from app.config import settings
 from src.services.results_service import ResultsService
-from src.utils.validators import validate_request_id, validate_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +24,12 @@ class PaginatedResultsResponse(CombinedContractResponse):
     filters_applied: Dict[str, Any]
 
 
-def get_results_service():
+def get_results_service() -> ResultsService:
     return ResultsService()
 
 
 @results_router.get("/request/{request_id}", response_model=Dict[str, Any])
-async def get_result_by_request_id(request_id: str, results_service: ResultsService = get_results_service()):
+async def get_result_by_request_id(request_id: str, results_service: ResultsService = Depends(get_results_service)):
     try:
         validate_request_id(request_id)
         result = await results_service.get_by_request_id(request_id)
@@ -50,7 +50,7 @@ async def get_result_by_request_id(request_id: str, results_service: ResultsServ
 
 
 @results_router.get("/image/{image_id}", response_model=List[Dict[str, Any]])
-async def get_results_by_image_id(image_id: str, results_service: ResultsService = get_results_service()):
+async def get_results_by_image_id(image_id: str, results_service: ResultsService = Depends(get_results_service)):
     try:
         results = await results_service.get_by_image_id(image_id)
 
@@ -73,7 +73,7 @@ async def get_results_by_image_id(image_id: str, results_service: ResultsService
 async def get_results_by_user_id(
     user_id: str,
     limit: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_QUERY_LIMIT),
-    results_service: ResultsService = get_results_service(),
+    results_service: ResultsService = Depends(get_results_service),
 ):
     try:
         validate_user_id(user_id)
@@ -101,7 +101,7 @@ async def get_all_results(
     status_filter: Optional[str] = Query(None, description="Filtrar por status"),
     user_id: Optional[str] = Query(None, description="Filtrar por user_id"),
     exclude_errors: bool = Query(False, description="Excluir resultados com erro"),
-    results_service: ResultsService = get_results_service(),
+    results_service: ResultsService = Depends(get_results_service),
 ):
     try:
         last_evaluated_key = None
@@ -148,7 +148,7 @@ async def get_all_results(
 @results_router.get("/summary", response_model=Dict[str, Any])
 async def get_results_summary(
     days: int = Query(7, ge=1, le=365, description="Número de dias para análise"),
-    results_service: ResultsService = get_results_service(),
+    results_service: ResultsService = Depends(get_results_service),
 ):
     try:
         summary = await results_service.get_results_summary(days)
@@ -165,7 +165,7 @@ async def get_results_summary(
 async def get_user_stats(
     user_id: str,
     days: int = Query(30, ge=1, le=365, description="Número de dias para análise"),
-    results_service: ResultsService = get_results_service(),
+    results_service: ResultsService = Depends(get_results_service),
 ):
     try:
         validate_user_id(user_id)
