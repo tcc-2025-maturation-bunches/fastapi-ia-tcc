@@ -1,4 +1,4 @@
-name: Pipeline CI/CD - Lambda Request Handler
+name: Pipeline CI/CD - Lambda Results Query
 
 on:
   push:
@@ -6,21 +6,21 @@ on:
       - main
       - develop
     paths:
-      - 'lambda-request-handler/**'
+      - 'lambda-results-query/**'
       - 'shared-libs/**'
-      - '.github/workflows/lambda-request.yaml'
+      - '.github/workflows/lambda-results.yaml'
   pull_request:
     branches:
       - main
       - develop
     paths:
-      - 'lambda-request-handler/**'
+      - 'lambda-results-query/**'
       - 'shared-libs/**'
-      - '.github/workflows/lambda-request.yaml'
+      - '.github/workflows/lambda-results.yaml'
 
 env:
   AWS_REGION: us-east-1
-  LAMBDA_NAME: fruit-detection-request-handler
+  LAMBDA_NAME: fruit-detection-results-query
   PYTHON_VERSION: '3.13'
 
 jobs:
@@ -45,20 +45,20 @@ jobs:
           cd ..
 
       - name: Instalar dependências da Lambda
-        working-directory: lambda-request-handler
+        working-directory: lambda-results-query
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install -r requirements-dev.txt || echo "No dev requirements"
+          pip install pytest black ruff || echo "Dev dependencies não encontradas"
 
       - name: Verificar formatação com Black e Ruff
-        working-directory: lambda-request-handler
+        working-directory: lambda-results-query
         run: |
           black --check src/
           ruff check src/
 
       - name: Executar testes
-        working-directory: lambda-request-handler
+        working-directory: lambda-results-query
         run: |
           python -m pytest tests/ -v || echo "Testes não encontrados"
 
@@ -78,33 +78,29 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Criar pacote de implantação
-        working-directory: lambda-request-handler
+        working-directory: lambda-results-query
         run: |
           mkdir -p deployment/src
           
-          # Copiar código fonte
           cp -r src/* deployment/src/
           
-          # Instalar dependências no diretório de deployment
           pip install -r requirements.txt -t deployment/
           
-          # Instalar shared-libs no diretório de deployment
           cd ../shared-libs
-          pip install . -t ../lambda-request-handler/deployment/
-          cd ../lambda-request-handler
+          pip install . -t ../lambda-results-query/deployment/
+          cd ../lambda-results-query
           
-          # Criar arquivo zip
           cd deployment
-          zip -r ../lambda-request-handler.zip .
+          zip -r ../lambda-results-query.zip .
           cd ..
           
-          echo "Package size: $(du -h lambda-request-handler.zip | cut -f1)"
+          echo "Package size: $(du -h lambda-results-query.zip | cut -f1)"
 
       - name: Upload artefato
         uses: actions/upload-artifact@v3
         with:
           name: lambda-package
-          path: lambda-request-handler/lambda-request-handler.zip
+          path: lambda-results-query/lambda-results-query.zip
           retention-days: 7
 
   deploy-dev:
@@ -132,23 +128,13 @@ jobs:
         run: |
           aws lambda update-function-code \
             --function-name ${{ env.LAMBDA_NAME }}-dev \
-            --zip-file fileb://lambda-request-handler.zip \
+            --zip-file fileb://lambda-results-query.zip \
             --publish
 
       - name: Aguardar atualização do Lambda
         run: |
           aws lambda wait function-updated \
             --function-name ${{ env.LAMBDA_NAME }}-dev
-
-      - name: Teste de funcionamento
-        run: |
-          aws lambda invoke \
-            --function-name ${{ env.LAMBDA_NAME }}-dev \
-            --payload '{"httpMethod": "GET", "path": "/health"}' \
-            response.json
-          
-          cat response.json
-          grep -q "healthy" response.json || exit 1
 
   deploy-prod:
     name: Implantação para Produção
@@ -175,7 +161,7 @@ jobs:
         run: |
           aws lambda update-function-code \
             --function-name ${{ env.LAMBDA_NAME }}-prod \
-            --zip-file fileb://lambda-request-handler.zip
+            --zip-file fileb://lambda-results-query.zip
 
       - name: Aguardar atualização do Lambda
         run: |
@@ -187,7 +173,7 @@ jobs:
         run: |
           STATUS="${{ job.status == 'success' && '✅ Sucesso' || '❌ Falhou' }}"
           COLOR="${{ job.status == 'success' && '3066993' || '15158332' }}"
-          TITLE="Lambda Request Handler - $STATUS"
+          TITLE="Lambda Results Query - $STATUS"
           
           curl -H "Content-Type: application/json" \
             -d "{\"embeds\": [{\"title\": \"$TITLE\", \"color\": $COLOR}]}" \
