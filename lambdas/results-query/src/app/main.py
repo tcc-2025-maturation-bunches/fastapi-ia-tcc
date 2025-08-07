@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from routes import health_router, results_router
+from src.routes import health_router, results_router
 
-from app.config import settings
+from src.app.config import settings
 
 logging.basicConfig(
     level=logging.INFO,

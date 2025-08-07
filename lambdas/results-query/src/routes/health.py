@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 from fastapi import APIRouter, HTTPException, status
 from fruit_detection_shared.domain.models import HealthCheckResponse, ServiceStatusResponse
 
-from app.config import settings
+from src.app.config import settings
 
 logger = logging.getLogger(__name__)
 

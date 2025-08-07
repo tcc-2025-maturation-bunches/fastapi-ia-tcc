@@ -5,9 +5,9 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fruit_detection_shared.domain.models import CombinedContractResponse
-from utils.validator import validate_request_id, validate_user_id
+from src.utils.validator import validate_request_id, validate_user_id
 
-from app.config import settings
+from src.app.config import settings
 from src.services.results_service import ResultsService
 
 logger = logging.getLogger(__name__)

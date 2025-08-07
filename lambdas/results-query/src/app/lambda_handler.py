@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from main import app
+from src.app.main import app
 from mangum import Mangum
 
 logger = logging.getLogger()
