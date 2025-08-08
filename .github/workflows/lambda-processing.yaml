@@ -227,8 +227,10 @@ jobs:
         run: |
           LOG_GROUP="/aws/lambda/${{ env.LAMBDA_NAME }}-prod"
           
-          aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query 'logGroups[0].logGroupName' --output text | grep -q "$LOG_GROUP" || \
-          aws logs create-log-group --log-group-name "$LOG_GROUP"
+          LOG_GROUP_EXISTS=$(aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query 'logGroups[0].logGroupName' --output text)
+          if [ -z "$LOG_GROUP_EXISTS" ] || [ "$LOG_GROUP_EXISTS" = "None" ]; then
+            aws logs create-log-group --log-group-name "$LOG_GROUP"
+          fi
           
           aws logs tag-log-group \
             --log-group-name "$LOG_GROUP" \
