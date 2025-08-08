@@ -163,8 +163,10 @@ jobs:
         run: |
           LOG_GROUP="/aws/lambda/${{ env.LAMBDA_NAME }}-dev"
           
-          aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query 'logGroups[0].logGroupName' --output text | grep -q "$LOG_GROUP" || \
-          aws logs create-log-group --log-group-name "$LOG_GROUP"
+          EXISTING_LOG_GROUP=$(aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query 'logGroups[0].logGroupName' --output text)
+          if [ -z "$EXISTING_LOG_GROUP" ] || [ "$EXISTING_LOG_GROUP" = "None" ] || [ "$EXISTING_LOG_GROUP" = "null" ]; then
+            aws logs create-log-group --log-group-name "$LOG_GROUP"
+          fi
           
           aws logs tag-log-group \
             --log-group-name "$LOG_GROUP" \
