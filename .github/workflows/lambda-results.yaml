@@ -205,7 +205,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_PROD }}
-          role-session-name: github-actions-lambda-request-prod
+          role-session-name: github-actions-lambda-results-prod
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Implantar no Lambda
