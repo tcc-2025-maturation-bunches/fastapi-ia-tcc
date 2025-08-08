@@ -140,7 +140,7 @@ jobs:
           aws lambda update-function-code \
             --function-name ${{ env.LAMBDA_NAME }}-dev \
             --zip-file fileb://lambda-results-query.zip \
-            --publish~
+            --publish
 
       - name: Aplicar tags na função Lambda
         run: |
