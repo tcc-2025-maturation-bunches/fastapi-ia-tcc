@@ -22,6 +22,13 @@ env:
   AWS_REGION: us-east-1
   LAMBDA_NAME: fruit-detection-processing-ai
   PYTHON_VERSION: '3.13'
+  TAG_ENVIRONMENT: graduacao
+  TAG_PROJECT: TCC
+  TAG_GROUP: CICD15
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   test:
@@ -110,38 +117,9 @@ jobs:
     if: github.ref == 'refs/heads/develop'
     environment: development
     
-    steps:
-      - name: Download do pacote lambda
-        uses: actions/download-artifact@v3
-        with:
-          name: lambda-package
-          path: ./
-
-      - name: Configurar credenciais AWS
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Implantar no Lambda
-        run: |
-          aws lambda update-function-code \
-            --function-name ${{ env.LAMBDA_NAME }}-dev \
-            --zip-file fileb://lambda-processing-ai.zip \
-            --publish
-
-      - name: Aguardar atualização do Lambda
-        run: |
-          aws lambda wait function-updated \
-            --function-name ${{ env.LAMBDA_NAME }}-dev
-
-  deploy-prod:
-    name: Implantação para Produção
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/main'
-    environment: production
+    permissions:
+      id-token: write
+      contents: read
     
     steps:
       - name: Download do pacote lambda
@@ -153,8 +131,71 @@ jobs:
       - name: Configurar credenciais AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_OIDC_DEV }}
+          role-session-name: github-actions-lambda-processing-dev
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Implantar no Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ env.LAMBDA_NAME }}-dev \
+            --zip-file fileb://lambda-processing-ai.zip \
+            --publish
+
+      - name: Aplicar tags na função Lambda
+        run: |
+          aws lambda tag-resource \
+            --resource arn:aws:lambda:${{ env.AWS_REGION }}:$(aws sts get-caller-identity --query Account --output text):function:${{ env.LAMBDA_NAME }}-dev \
+            --tags \
+              environment=${{ env.TAG_ENVIRONMENT }} \
+              project=${{ env.TAG_PROJECT }} \
+              group=${{ env.TAG_GROUP }} \
+              branch=develop \
+              deployed_by=github-actions \
+              deployment_date=$(date +%Y-%m-%d)
+
+      - name: Aguardar atualização do Lambda
+        run: |
+          aws lambda wait function-updated \
+            --function-name ${{ env.LAMBDA_NAME }}-dev
+
+      - name: Aplicar tags no CloudWatch Log Group
+        run: |
+          LOG_GROUP="/aws/lambda/${{ env.LAMBDA_NAME }}-dev"
+          
+          aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query 'logGroups[0].logGroupName' --output text | grep -q "$LOG_GROUP" || \
+          aws logs create-log-group --log-group-name "$LOG_GROUP"
+          
+          aws logs tag-log-group \
+            --log-group-name "$LOG_GROUP" \
+            --tags \
+              environment=${{ env.TAG_ENVIRONMENT }} \
+              project=${{ env.TAG_PROJECT }} \
+              group=${{ env.TAG_GROUP }}
+
+  deploy-prod:
+    name: Implantação para Produção
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Download do pacote lambda
+        uses: actions/download-artifact@v3
+        with:
+          name: lambda-package
+          path: ./
+
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_PROD }}
+          role-session-name: github-actions-lambda-processing-prod
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Implantar no Lambda
@@ -163,10 +204,36 @@ jobs:
             --function-name ${{ env.LAMBDA_NAME }}-prod \
             --zip-file fileb://lambda-processing-ai.zip
 
+      - name: Aplicar tags na função Lambda
+        run: |
+          aws lambda tag-resource \
+            --resource arn:aws:lambda:${{ env.AWS_REGION }}:$(aws sts get-caller-identity --query Account --output text):function:${{ env.LAMBDA_NAME }}-prod \
+            --tags \
+              environment=${{ env.TAG_ENVIRONMENT }} \
+              project=${{ env.TAG_PROJECT }} \
+              group=${{ env.TAG_GROUP }} \
+              branch=main \
+              deployed_by=github-actions \
+              deployment_date=$(date +%Y-%m-%d)
+
       - name: Aguardar atualização do Lambda
         run: |
           aws lambda wait function-updated \
             --function-name ${{ env.LAMBDA_NAME }}-prod
+
+      - name: Aplicar tags no CloudWatch Log Group
+        run: |
+          LOG_GROUP="/aws/lambda/${{ env.LAMBDA_NAME }}-prod"
+          
+          aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query 'logGroups[0].logGroupName' --output text | grep -q "$LOG_GROUP" || \
+          aws logs create-log-group --log-group-name "$LOG_GROUP"
+          
+          aws logs tag-log-group \
+            --log-group-name "$LOG_GROUP" \
+            --tags \
+              environment=${{ env.TAG_ENVIRONMENT }} \
+              project=${{ env.TAG_PROJECT }} \
+              group=${{ env.TAG_GROUP }}
 
       - name: Notificar equipe sobre implantação no Discord
         if: always()
@@ -176,5 +243,5 @@ jobs:
           TITLE="Lambda Processing AI - $STATUS"
           
           curl -H "Content-Type: application/json" \
-            -d "{\"embeds\": [{\"title\": \"$TITLE\", \"color\": $COLOR}]}" \
+            -d "{\"embeds\": [{\"title\": \"$TITLE\", \"color\": $COLOR, \"fields\": [{\"name\": \"Tags\", \"value\": \"environment=${{ env.TAG_ENVIRONMENT }}, project=${{ env.TAG_PROJECT }}, group=${{ env.TAG_GROUP }}\"}]}]}" \
             ${{ secrets.DISCORD_WEBHOOK }}
