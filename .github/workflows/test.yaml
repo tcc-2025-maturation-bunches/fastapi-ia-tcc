@@ -97,7 +97,7 @@ jobs:
           echo "Package size: $(du -h lambda-request-handler.zip | cut -f1)"
 
       - name: Upload artefato
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: lambda-package-test
           path: lambdas/request-handler/lambda-request-handler.zip
@@ -115,7 +115,7 @@ jobs:
     
     steps:
       - name: Download do pacote lambda
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: lambda-package-test
           path: ./

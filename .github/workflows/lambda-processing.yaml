@@ -104,7 +104,7 @@ jobs:
           echo "Package size: $(du -h lambda-processing-ai.zip | cut -f1)"
 
       - name: Upload artefato
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: lambda-package
           path: lambda-processing-ai/lambda-processing-ai.zip
@@ -123,7 +123,7 @@ jobs:
     
     steps:
       - name: Download do pacote lambda
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: lambda-package
           path: ./
@@ -188,7 +188,7 @@ jobs:
     
     steps:
       - name: Download do pacote lambda
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: lambda-package
           path: ./
@@ -227,8 +227,8 @@ jobs:
         run: |
           LOG_GROUP="/aws/lambda/${{ env.LAMBDA_NAME }}-prod"
           
-          LOG_GROUP_EXISTS=$(aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query 'logGroups[0].logGroupName' --output text)
-          if [ -z "$LOG_GROUP_EXISTS" ] || [ "$LOG_GROUP_EXISTS" = "None" ]; then
+          EXISTING_LOG_GROUP=$(aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query 'logGroups[0].logGroupName' --output text)
+          if [ -z "$EXISTING_LOG_GROUP" ] || [ "$EXISTING_LOG_GROUP" = "None" ]; then
             aws logs create-log-group --log-group-name "$LOG_GROUP"
           fi
           
