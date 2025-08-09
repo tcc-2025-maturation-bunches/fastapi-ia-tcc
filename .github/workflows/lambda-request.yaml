@@ -135,7 +135,7 @@ jobs:
       - name: Configurar credenciais AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_OIDC_DEV }}
+          role-to-assume: ${{ secrets.AWS_OIDC_KEY }}
           role-session-name: github-actions-lambda-request-dev
           aws-region: ${{ env.AWS_REGION }}
 
@@ -210,7 +210,7 @@ jobs:
       - name: Configurar credenciais AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_OIDC_PROD }}
+          role-to-assume: ${{ secrets.AWS_OIDC_KEY }}
           role-session-name: github-actions-lambda-request-prod
           aws-region: ${{ env.AWS_REGION }}
 
