@@ -1,0 +1,56 @@
+name: Pipeline CI/CD - Lambda Request Handler (Test OIDC)
+
+on:
+  push:
+    branches:
+      - oidc-aws-ci
+    paths:
+      - 'lambdas/request-handler/**'
+      - 'shared-libs/**'
+      - '.github/workflows/test.yaml'
+
+env:
+  AWS_REGION: us-east-1
+  LAMBDA_NAME: fruit-detection-request-handler
+  PYTHON_VERSION: '3.13'
+  TAG_ENVIRONMENT: graduacao
+  TAG_PROJECT: TCC
+  TAG_GROUP: CICD15
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    name: Testes e Verificação de Qualidade (OIDC Branch)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Instalar biblioteca compartilhada
+        run: |
+          cd shared-libs
+          pip install -e .
+          cd ..
+
+      - name: Instalar dependências da Lambda
+        working-directory: lambdas/request-handler
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt || echo "No dev requirements"
+
+      - name: Verificar formatação com Black e Ruff
+        working-directory: lambdas/request-handler
+        run: |
+          black --check src/
+          ruff check src/
