@@ -42,7 +42,7 @@ lambda-processing-ai/
 ### Variáveis de Ambiente
 
 **Ambiente e Logs**
-- `ENVIRONMENT`: Ambiente (hml/prod)
+- `ENVIRONMENT`: Ambiente (hom/prod)
 - `LOG_LEVEL`: Nível de logging (INFO)
 - `AWS_REGION`: Região AWS (us-east-1)
 

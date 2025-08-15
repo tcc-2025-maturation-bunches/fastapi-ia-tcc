@@ -41,7 +41,7 @@ lambda-request-handler/
 
 ### Variáveis de Ambiente
 
-- `ENVIRONMENT`: Ambiente (hml/prod)
+- `ENVIRONMENT`: Ambiente (hom/prod)
 - `SQS_QUEUE_URL`: URL da fila SQS para processamento
 - `DYNAMODB_TABLE_NAME`: Nome da tabela DynamoDB
 - `S3_IMAGES_BUCKET`: Bucket para imagens originais

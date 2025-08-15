@@ -40,7 +40,7 @@ lambda-results-query/
 
 ### Variáveis de Ambiente
 
-- `ENVIRONMENT`: Ambiente (hml/prod)
+- `ENVIRONMENT`: Ambiente (hom/prod)
 - `DYNAMODB_TABLE_NAME`: Nome da tabela DynamoDB de resultados
 - `S3_RESULTS_BUCKET`: Bucket de resultados processados
 - `MAX_QUERY_LIMIT`: Limite máximo de consulta (200)
