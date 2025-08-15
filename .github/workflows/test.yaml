@@ -141,7 +141,7 @@ jobs:
             aws lambda create-function \
               --function-name "$FUNCTION_NAME" \
               --runtime python3.13 \
-              --role ${{ secrets.AWS_LAMBDA_ROLE_ARN }} \
+              --role ${{ secrets.AWS_OIDC_KEY }} \
               --handler src.app.lambda_handler.lambda_handler \
               --zip-file fileb://lambda-request-handler.zip \
               --timeout 30 \
