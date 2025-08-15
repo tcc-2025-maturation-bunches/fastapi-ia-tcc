@@ -132,6 +132,25 @@ jobs:
           aws sts get-caller-identity
           aws lambda list-functions --query 'Functions[?FunctionName==`${{ env.LAMBDA_NAME }}-test`]'
 
+      - name: Criar função Lambda de teste se não existir
+        run: |
+          set -e
+          FUNCTION_NAME="${{ env.LAMBDA_NAME }}-test"
+          EXISTS=$(aws lambda list-functions --query "Functions[?FunctionName=='$FUNCTION_NAME'] | length(@)")
+          if [ "$EXISTS" -eq "0" ]; then
+            aws lambda create-function \
+              --function-name "$FUNCTION_NAME" \
+              --runtime python3.13 \
+              --role ${{ secrets.AWS_LAMBDA_ROLE_ARN }} \
+              --handler src.app.lambda_handler.lambda_handler \
+              --zip-file fileb://lambda-request-handler.zip \
+              --timeout 30 \
+              --memory-size 1024
+            echo "Função Lambda criada: $FUNCTION_NAME"
+          else
+            echo "Função Lambda já existe: $FUNCTION_NAME"
+          fi
+
       - name: Implantar no Lambda de teste
         run: |
           aws lambda update-function-code \
