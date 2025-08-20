@@ -162,14 +162,7 @@ jobs:
         run: |
           aws lambda tag-resource \
             --resource arn:aws:lambda:${{ env.AWS_REGION }}:$(aws sts get-caller-identity --query Account --output text):function:${{ env.LAMBDA_NAME }}-test \
-            --tags \
-              environment=test \
-              project=${{ env.TAG_PROJECT }} \
-              group=${{ env.TAG_GROUP }} \
-              branch=oidc-aws-ci \
-              deployed_by=github-actions \
-              deployment_date=$(date +%Y-%m-%d) \
-              test_deployment=true
+            --tags environment=graduacao project=TCC group=CICD15 owner=bossini creator=22.01019-0
 
       - name: Aguardar atualização do Lambda
         run: |
