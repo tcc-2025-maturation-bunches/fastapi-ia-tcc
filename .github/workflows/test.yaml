@@ -157,13 +157,7 @@ jobs:
             --function-name ${{ env.LAMBDA_NAME }}-test \
             --zip-file fileb://lambda-request-handler.zip \
             --publish
-
-      - name: Aplicar tags na função Lambda
-        run: |
-          aws lambda tag-resource \
-            --resource arn:aws:lambda:${{ env.AWS_REGION }}:$(aws sts get-caller-identity --query Account --output text):function:${{ env.LAMBDA_NAME }}-test \
-            --tags environment=graduacao project=TCC group=CICD15 owner=bossini creator=22.01019-0
-
+            
       - name: Aguardar atualização do Lambda
         run: |
           aws lambda wait function-updated \
