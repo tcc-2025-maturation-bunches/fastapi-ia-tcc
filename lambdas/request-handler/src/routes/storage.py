@@ -18,7 +18,7 @@ class PresignedURLRequest(BaseModel):
     content_type: str = Field(..., min_length=1)
     user_id: str = Field(..., min_length=1, max_length=128)
 
-    @field_validator("filename")
+    @field_validator("user_id")
     @classmethod
     def validate_user_id_field(cls, v):
         return validate_user_id(v)

@@ -6,7 +6,7 @@ import boto3
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, status
 
-from app.config import settings
+from src.app.config import settings
 from src.services.queue_service import QueueService
 
 logger = logging.getLogger(__name__)
