@@ -1,23 +1,23 @@
-# src/shared/domain/models/http_models.py
+# fruit_detection_shared/shared/domain/models/http_models.py
 from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, Field, HttpUrl
 
-from src.domain.enums.ia_model_type_enum import ModelType
-from src.domain.models.base_models import (
+from fruit_detection_shared.domain.enums.ia_model_type_enum import ModelType
+from fruit_detection_shared.domain.models.base_models import (
     BoundingBox,
     DetectionInfo,
     ImageMetadata,
     MaturationInfo,
     ProcessingSummary,
 )
-from src.domain.models.combined_models import (
+from fruit_detection_shared.domain.models.combined_models import (
     CombinedContractResponse,
     CombinedProcessingRequest,
     ProcessingConfig,
 )
-from src.domain.models.device_models import (
+from fruit_detection_shared.domain.models.device_models import (
     BulkDeviceAction,
     DeviceActivityResponse,
     DeviceAlertRequest,
@@ -34,7 +34,7 @@ from src.domain.models.device_models import (
     ImageUploadProcessRequest,
     ProcessingJobResponse,
 )
-from src.domain.models.status_models import HealthCheckResponse, ServiceStatusResponse
+from fruit_detection_shared.domain.models.status_models import HealthCheckResponse, ServiceStatusResponse
 
 __all__ = [
     "ImageMetadata",

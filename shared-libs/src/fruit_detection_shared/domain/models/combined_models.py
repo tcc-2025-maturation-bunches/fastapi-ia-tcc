@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, HttpUrl
 
-from src.shared.domain.models.base_models import ContractDetectionSummary, MaturationInfo, ProcessingMetadata
+from fruit_detection_shared.shared.domain.models.base_models import ContractDetectionSummary, MaturationInfo, ProcessingMetadata
 
 
 class CombinedProcessingRequest(BaseModel):

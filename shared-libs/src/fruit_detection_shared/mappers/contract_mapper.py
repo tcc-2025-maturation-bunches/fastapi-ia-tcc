@@ -1,11 +1,11 @@
-from src.domain.entities.combined_result import CombinedResult
-from src.domain.models.base_models import (
+from fruit_detection_shared.domain.entities.combined_result import CombinedResult
+from fruit_detection_shared.domain.models.base_models import (
     ImageDimensions,
     MaturationDistribution,
     MaturationInfo,
     ProcessingMetadata,
 )
-from src.domain.models.combined_models import (
+from fruit_detection_shared.domain.models.combined_models import (
     CombinedContractResponse,
     ContractDetection,
     ContractDetectionResult,

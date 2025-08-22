@@ -6,7 +6,7 @@ from typing import Any, BinaryIO, Dict, Optional
 import boto3
 from botocore.exceptions import ClientError
 
-from src.app.config import settings
+from fruit_detection_shared.app.config import settings
 
 logger = logging.getLogger(__name__)
 
