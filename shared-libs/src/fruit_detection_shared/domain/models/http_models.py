@@ -4,20 +4,20 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, HttpUrl
 
-from src.shared.domain.enums.ia_model_type_enum import ModelType
-from src.shared.domain.models.base_models import (
+from src.domain.enums.ia_model_type_enum import ModelType
+from src.domain.models.base_models import (
     BoundingBox,
     DetectionInfo,
     ImageMetadata,
     MaturationInfo,
     ProcessingSummary,
 )
-from src.shared.domain.models.combined_models import (
+from src.domain.models.combined_models import (
     CombinedContractResponse,
     CombinedProcessingRequest,
     ProcessingConfig,
 )
-from src.shared.domain.models.device_models import (
+from src.domain.models.device_models import (
     BulkDeviceAction,
     DeviceActivityResponse,
     DeviceAlertRequest,
@@ -34,7 +34,7 @@ from src.shared.domain.models.device_models import (
     ImageUploadProcessRequest,
     ProcessingJobResponse,
 )
-from src.shared.domain.models.status_models import HealthCheckResponse, ServiceStatusResponse
+from src.domain.models.status_models import HealthCheckResponse, ServiceStatusResponse
 
 __all__ = [
     "ImageMetadata",

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from src.shared.domain.entities.combined_result import CombinedResult
+from src.domain.entities.combined_result import CombinedResult
 
 
 class RequestSummaryMapper:

@@ -1,7 +1,7 @@
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
-from src.shared.domain.models.combined_models import (
+from src.domain.models.combined_models import (
     ContractDetection,
     ContractDetectionResult,
     ContractDetectionSummary,

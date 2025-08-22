@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from src.shared.domain.enums.ia_model_type_enum import ModelType
+from src.domain.enums.ia_model_type_enum import ModelType
 
 
 class DetectionResult:
