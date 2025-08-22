@@ -3,9 +3,9 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
-from services.presigned_service import PresignedURLService
 
 from src.app.config import settings
+from src.services.presigned_service import PresignedURLService
 from src.utils.validators import validate_user_id
 
 logger = logging.getLogger(__name__)

@@ -163,15 +163,60 @@ jobs:
           aws lambda wait function-updated \
             --function-name ${{ env.LAMBDA_NAME }}-test
 
-      - name: Teste de funcionamento
+      - name: Teste de funcionamento - Health Check
         run: |
+          echo '{"httpMethod": "GET", "path": "/health", "headers": {}, "body": null}' > test_payload.json
+          
           aws lambda invoke \
             --function-name ${{ env.LAMBDA_NAME }}-test \
-            --payload '{"httpMethod": "GET", "path": "/health"}' \
+            --payload file://test_payload.json \
             response.json
           
+          echo "=== Resposta da Lambda ==="
           cat response.json
-          grep -q "healthy" response.json || echo "Health check não encontrado, mas função executou"
+          echo ""
+          echo "=========================="
+          
+          if grep -q '"statusCode": 200' response.json; then
+            echo "✅ Health check passou com statusCode 200"
+          else
+            echo "❌ Health check falhou"
+            exit 1
+          fi
+
+      - name: Teste de funcionamento - Root endpoint
+        run: |
+          echo '{"httpMethod": "GET", "path": "/", "headers": {}, "body": null}' > test_root_payload.json
+          
+          aws lambda invoke \
+            --function-name ${{ env.LAMBDA_NAME }}-test \
+            --payload file://test_root_payload.json \
+            response_root.json
+          
+          echo "=== Resposta do Root Endpoint ==="
+          cat response_root.json
+          echo ""
+          echo "================================"
+
+      - name: Teste de funcionamento - Info endpoint
+        run: |
+          echo '{"httpMethod": "GET", "path": "/info", "headers": {}, "body": null}' > test_info_payload.json
+          
+          aws lambda invoke \
+            --function-name ${{ env.LAMBDA_NAME }}-test \
+            --payload file://test_info_payload.json \
+            response_info.json
+          
+          echo "=== Resposta do Info Endpoint ==="
+          cat response_info.json
+          echo ""
+          echo "================================="
+
+      - name: Verificar logs da Lambda
+        if: always()
+        run: |
+          echo "=== Últimos logs da Lambda ==="
+          aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/${{ env.LAMBDA_NAME }}-test" --query 'logGroups[0].logGroupName' --output text | xargs -I {} aws logs describe-log-streams --log-group-name {} --order-by LastEventTime --descending --max-items 1 --query 'logStreams[0].logStreamName' --output text | xargs -I {} aws logs get-log-events --log-group-name "/aws/lambda/${{ env.LAMBDA_NAME }}-test" --log-stream-name {} --query 'events[*].message' --output text || echo "Não foi possível obter logs"
 
       - name: Notificar sucesso do teste OIDC
         if: success()

@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 from botocore.exceptions import ClientError
 from fruit_detection_shared.infra.external import S3Client
 
-from app.config import settings
+from src.app.config import settings
 
 logger = logging.getLogger(__name__)
 
