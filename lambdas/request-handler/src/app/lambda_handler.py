@@ -16,7 +16,7 @@ def lambda_handler(event, context):
     logger.info(f"Lambda invocado com evento: {json.dumps(event)}")
 
     if context:
-        logger.info(f"ID da requisição: {context.request_id}")
+        logger.info(f"ID da requisição: {context.aws_request_id}")
         logger.info(f"ARN da função: {context.invoked_function_arn}")
         logger.info(f"Tempo restante: {context.get_remaining_time_in_millis()}ms")
 
@@ -36,7 +36,7 @@ def lambda_handler(event, context):
                 {
                     "error": "Erro interno do servidor",
                     "message": str(e),
-                    "requestId": context.request_id if context else None,
+                    "requestId": context.aws_request_id if context else None,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             ),
