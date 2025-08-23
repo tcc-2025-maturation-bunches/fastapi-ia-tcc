@@ -1,43 +1,105 @@
+import logging
 import os
+from typing import Any, Dict
+
 
 class Settings:
-    """Classe de configurações simplificada sem depender do Pydantic"""
-    
+
     def __init__(self):
-        # Variáveis de ambiente básicas
+        self.logger = logging.getLogger(__name__)
         self.ENVIRONMENT = os.getenv("ENVIRONMENT", "dev")
         self.DEBUG = os.getenv("DEBUG", "True").lower() == "true"
-        
-        # Configurações da AWS
+        self.APP_NAME = "fruit-detection-api"
+        self.APP_VERSION = "0.2.0"
+
         self.AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
-        
-        # DynamoDB
-        self.DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", "ia-results")
-        
-        # EC2
+
+        self.resource_prefix = f"{self.APP_NAME}-{self.ENVIRONMENT}"
+
+        self.DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", f"{self.resource_prefix}-results")
+        self.DYNAMODB_DEVICES_TABLE = os.getenv("DYNAMODB_DEVICES_TABLE", f"{self.resource_prefix}-devices")
+        self.DYNAMODB_DEVICE_ACTIVITIES_TABLE = os.getenv(
+            "DYNAMODB_DEVICE_ACTIVITIES_TABLE", f"{self.resource_prefix}-device-activities"
+        )
+        self.S3_IMAGES_BUCKET = os.getenv("S3_IMAGES_BUCKET", f"{self.resource_prefix}-images")
+        self.S3_RESULTS_BUCKET = os.getenv("S3_RESULTS_BUCKET", f"{self.resource_prefix}-results")
+
         self.EC2_IA_ENDPOINT = os.getenv("EC2_IA_ENDPOINT", "http://localhost:8001")
-        self.DETECTION_ENDPOINT = f"{self.EC2_IA_ENDPOINT}/detect"
-        self.MATURATION_ENDPOINT = f"{self.EC2_IA_ENDPOINT}/maturation"
-        
-        # Timeout para requisições (em segundos)
+        self.COMBINED_ENDPOINT = f"{self.EC2_IA_ENDPOINT}/process-combined"
+
         self.REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "30"))
-        
-    def load_dotenv(self, env_file=".env"):
-        """Carrega variáveis de ambiente de um arquivo .env se disponível"""
+
+        self.MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
+        self.ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/jpg"]
+        self.PRESIGNED_URL_EXPIRY_MINUTES = int(os.getenv("PRESIGNED_URL_EXPIRY_MINUTES", "15"))
+
+        self.ENABLE_AUTO_MATURATION = os.getenv("ENABLE_AUTO_MATURATION", "True").lower() == "true"
+        self.MIN_DETECTION_CONFIDENCE = float(os.getenv("MIN_DETECTION_CONFIDENCE", "0.6"))
+        self.MIN_MATURATION_CONFIDENCE = float(os.getenv("MIN_MATURATION_CONFIDENCE", "0.7"))
+
+        self.DEVICE_HEARTBEAT_TIMEOUT_MINUTES = int(os.getenv("DEVICE_HEARTBEAT_TIMEOUT", "5"))
+        self.DEVICE_CHECK_INTERVAL_SECONDS = int(os.getenv("DEVICE_CHECK_INTERVAL", "60"))
+        self.DEVICE_OFFLINE_CLEANUP_HOURS = int(os.getenv("DEVICE_OFFLINE_CLEANUP", "24"))
+        self.MAX_DEVICES_PER_LOCATION = int(os.getenv("MAX_DEVICES_PER_LOCATION", "50"))
+
+        self.ENABLE_CACHE = os.getenv("ENABLE_CACHE", "False").lower() == "true"
+        self.CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
+        self.CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
+        self.CORS_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+        self.CORS_HEADERS = ["*"]
+
+        self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+    def load_dotenv(self, env_file: str = ".env") -> None:
         try:
             if os.path.exists(env_file):
-                with open(env_file, 'r') as f:
+                with open(env_file, "r") as f:
                     for line in f:
                         line = line.strip()
-                        if not line or line.startswith('#'):
+                        if not line or line.startswith("#"):
                             continue
-                        if '=' in line:
-                            key, value = line.split('=', 1)
+                        if "=" in line:
+                            key, value = line.split("=", 1)
                             if key and not os.getenv(key):
                                 os.environ[key] = value
                 self.__init__()
+                self.logger.info(f"Variáveis de ambiente carregadas de {env_file}")
         except Exception as e:
-            print(f"Erro ao carregar arquivo .env: {e}")
+            self.logger.error(f"Erro ao carregar arquivo .env: {e}")
+
+    def get_all_settings(self) -> Dict[str, Any]:
+        return {
+            key: value
+            for key, value in self.__dict__.items()
+            if not key.startswith("_") and key != "get_all_settings" and key != "load_dotenv"
+        }
+
+    def get_s3_url(self, bucket_name: str, key: str) -> str:
+        return f"https://{bucket_name}.s3.{self.AWS_REGION}.amazonaws.com/{key}"
+
+    def get_processing_options(self) -> Dict[str, Any]:
+        return {
+            "enable_auto_maturation": self.ENABLE_AUTO_MATURATION,
+            "min_detection_confidence": self.MIN_DETECTION_CONFIDENCE,
+            "min_maturation_confidence": self.MIN_MATURATION_CONFIDENCE,
+        }
+
+    def get_device_monitoring_config(self) -> Dict[str, Any]:
+        """
+        Retorna as configurações de monitoramento de dispositivos.
+
+        Returns:
+            Dict[str, Any]: Configurações de dispositivos
+        """
+        return {
+            "devices_table": self.DYNAMODB_DEVICES_TABLE,
+            "activities_table": self.DYNAMODB_DEVICE_ACTIVITIES_TABLE,
+            "heartbeat_timeout_minutes": self.DEVICE_HEARTBEAT_TIMEOUT_MINUTES,
+            "check_interval_seconds": self.DEVICE_CHECK_INTERVAL_SECONDS,
+            "offline_cleanup_hours": self.DEVICE_OFFLINE_CLEANUP_HOURS,
+            "max_devices_per_location": self.MAX_DEVICES_PER_LOCATION,
+        }
+
 
 settings = Settings()
 settings.load_dotenv()
