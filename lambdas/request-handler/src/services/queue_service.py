@@ -17,7 +17,7 @@ class QueueService:
     def __init__(self, queue_url: Optional[str] = None, region: Optional[str] = None):
         queue_url = queue_url or settings.SQS_QUEUE_URL
         region = region or settings.AWS_REGION
-        
+
         self.sqs_client = SQSClient(queue_url=queue_url, region=region)
         self.queue_url = queue_url
 

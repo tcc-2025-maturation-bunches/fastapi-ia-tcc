@@ -28,11 +28,11 @@ class StatusService:
     def __init__(self, table_name: Optional[str] = None, region: Optional[str] = None):
         table_name = table_name or settings.DYNAMODB_TABLE_NAME
         region = region or settings.AWS_REGION
-        
+
         self.dynamo_client = DynamoClient(table_name=table_name, region=region)
         self.table_name = table_name
         self.region = region
-        
+
         self.dynamodb = boto3.resource("dynamodb", region_name=region)
         self.table = self.dynamodb.Table(table_name)
 
