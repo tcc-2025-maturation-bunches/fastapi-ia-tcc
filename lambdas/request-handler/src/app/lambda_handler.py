@@ -13,7 +13,11 @@ handler = Mangum(app, lifespan="off")
 
 
 def lambda_handler(event, context):
-    logger.info(f"Lambda invocado com evento: {json.dumps(event, default=str)}")
+    event_str = json.dumps(event, default=str)
+    if len(event_str) > 1000:
+        logger.info(f"Lambda invocado - Evento (truncado): {event_str[:1000]}...")
+    else:
+        logger.info(f"Lambda invocado - Evento: {event_str}")
 
     if context:
         logger.info(f"ID da requisição: {context.aws_request_id}")

@@ -11,27 +11,11 @@ Parameters:
       - hom
       - prod
     Description: Ambiente de implantação
-  
-  SQSQueueURL:
-    Type: String
-    Description: URL da fila SQS de processamento
-  
-  DynamoDBTableName:
-    Type: String
-    Description: Nome da tabela DynamoDB de resultados
-  
-  S3ImagesBucket:
-    Type: String
-    Description: Bucket S3 para armazenamento de imagens
-  
-  S3ResultsBucket:
-    Type: String
-    Description: Bucket S3 para armazenamento de resultados
 
 Globals:
   Function:
     Timeout: 30
-    MemorySize: 512
+    MemorySize: 1024
     Runtime: python3.13
     Environment:
       Variables:
@@ -49,27 +33,40 @@ Resources:
       Runtime: python3.13
       MemorySize: 1024
       Timeout: 30
-      Tracing: Active
       Environment:
         Variables:
-          SQS_QUEUE_URL: !Ref SQSQueueURL
-          DYNAMODB_TABLE_NAME: !Ref DynamoDBTableName
-          S3_IMAGES_BUCKET: !Ref S3ImagesBucket
-          S3_RESULTS_BUCKET: !Ref S3ResultsBucket
+          SQS_QUEUE_URL: !Sub https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/fruit-detection-${Environment}-processing-queue.fifo
+          DYNAMODB_TABLE_NAME: !Sub fruit-detection-${Environment}-results
+          S3_IMAGES_BUCKET: !Sub fruit-detection-${Environment}-images
+          S3_RESULTS_BUCKET: !Sub fruit-detection-${Environment}-results
           PRESIGNED_URL_EXPIRY_MINUTES: 15
           MIN_DETECTION_CONFIDENCE: 0.6
           MIN_MATURATION_CONFIDENCE: 0.7
+      
+      Events:
+        ApiGatewayProxyRoot:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /{proxy+}
+            Method: ANY
+        
+        ApiGatewayRoot:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /
+            Method: ANY
+      
       Policies:
         - Version: '2012-10-17'
           Statement:
-            # SQS Permissions
             - Effect: Allow
               Action:
                 - sqs:SendMessage
                 - sqs:GetQueueAttributes
               Resource: !Sub arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:*
             
-            # DynamoDB Permissions
             - Effect: Allow
               Action:
                 - dynamodb:PutItem
@@ -78,10 +75,9 @@ Resources:
                 - dynamodb:Query
                 - dynamodb:Scan
               Resource:
-                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBTableName}
-                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBTableName}/index/*
+                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/fruit-detection-${Environment}-results
+                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/fruit-detection-${Environment}-results/index/*
             
-            # S3 Permissions
             - Effect: Allow
               Action:
                 - s3:PutObject
@@ -90,33 +86,10 @@ Resources:
                 - s3:HeadObject
                 - s3:HeadBucket
               Resource:
-                - !Sub arn:aws:s3:::${S3ImagesBucket}/*
-                - !Sub arn:aws:s3:::${S3ResultsBucket}/*
-                - !Sub arn:aws:s3:::${S3ImagesBucket}
-                - !Sub arn:aws:s3:::${S3ResultsBucket}
-            
-            # CloudWatch Logs
-            - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: '*'
-            
-            # X-Ray Tracing
-            - Effect: Allow
-              Action:
-                - xray:PutTraceSegments
-                - xray:PutTelemetryRecords
-              Resource: '*'
-      
-      Events:
-        ApiGateway:
-          Type: Api
-          Properties:
-            Path: /{proxy+}
-            Method: ANY
-            RestApiId: !Ref ApiGateway
+                - !Sub arn:aws:s3:::fruit-detection-${Environment}-images/*
+                - !Sub arn:aws:s3:::fruit-detection-${Environment}-results/*
+                - !Sub arn:aws:s3:::fruit-detection-${Environment}-images
+                - !Sub arn:aws:s3:::fruit-detection-${Environment}-results
 
   ApiGateway:
     Type: AWS::Serverless::Api
@@ -131,76 +104,56 @@ Resources:
       DefinitionBody:
         openapi: '3.0.1'
         info:
-          title: Request Handler API
-          version: '1.0'
+          title: !Sub ${AWS::StackName}-API
+          version: '1.0.0'
         paths:
-          /{proxy+}:
+          /:
             x-amazon-apigateway-any-method:
               x-amazon-apigateway-integration:
-                uri:
-                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RequestHandlerFunction.Arn}/invocations
+                uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RequestHandlerFunction.Arn}/invocations
                 passthroughBehavior: when_no_match
                 httpMethod: POST
                 type: aws_proxy
-              responses: {}
+              responses:
+                '200':
+                  description: 'Success'
+                  headers:
+                    Access-Control-Allow-Origin:
+                      schema:
+                        type: string
+          
+          /{proxy+}:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RequestHandlerFunction.Arn}/invocations
+                passthroughBehavior: when_no_match
+                httpMethod: POST
+                type: aws_proxy
+              responses:
+                '200':
+                  description: 'Success'
+                  headers:
+                    Access-Control-Allow-Origin:
+                      schema:
+                        type: string
 
-  # CloudWatch Log Group
-  RequestHandlerLogGroup:
-    Type: AWS::Logs::LogGroup
+  ApiGatewayInvokePermission:
+    Type: AWS::Lambda::Permission
     Properties:
-      LogGroupName: !Sub /aws/lambda/${RequestHandlerFunction}
-      RetentionInDays: 7
-
-  # CloudWatch Alarms
-  RequestHandlerErrorAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub fruit-detection-${Environment}-request-handler-errors
-      AlarmDescription: Dispara quando a Lambda Request Handler apresenta erros
-      MetricName: Errors
-      Namespace: AWS/Lambda
-      Statistic: Sum
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 5
-      ComparisonOperator: GreaterThanThreshold
-      Dimensions:
-        - Name: FunctionName
-          Value: !Ref RequestHandlerFunction
-      TreatMissingData: notBreaching
-
-  RequestHandlerThrottleAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub fruit-detection-${Environment}-request-handler-throttles
-      AlarmDescription: Dispara quando a Lambda Request Handler está sendo limitada
-      MetricName: Throttles
-      Namespace: AWS/Lambda
-      Statistic: Sum
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 10
-      ComparisonOperator: GreaterThanThreshold
-      Dimensions:
-        - Name: FunctionName
-          Value: !Ref RequestHandlerFunction
-      TreatMissingData: notBreaching
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref RequestHandlerFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/*
 
 Outputs:
   RequestHandlerFunctionArn:
-    Description: ARN da função Lambda Request Handler
+    Description: ARN da função Lambda
     Value: !GetAtt RequestHandlerFunction.Arn
-    Export:
-      Name: !Sub ${AWS::StackName}-RequestHandlerFunctionArn
-  
+    
   ApiGatewayUrl:
-    Description: URL do endpoint API Gateway
+    Description: URL do API Gateway
     Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
-    Export:
-      Name: !Sub ${AWS::StackName}-ApiGatewayUrl
-  
+    
   ApiGatewayId:
     Description: ID do API Gateway
     Value: !Ref ApiGateway
-    Export:
-      Name: !Sub ${AWS::StackName}-ApiGatewayId

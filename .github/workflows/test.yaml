@@ -165,7 +165,26 @@ jobs:
 
       - name: Teste de funcionamento - Health Check
         run: |
-          echo '{"httpMethod": "GET", "path": "/health", "headers": {}, "body": null}' > test_payload.json
+          echo '{
+            "httpMethod": "GET",
+            "path": "/health",
+            "headers": {},
+            "body": null,
+            "pathParameters": {
+              "proxy": "health"
+            },
+            "queryStringParameters": null,
+            "requestContext": {
+              "requestId": "test-request-id",
+              "httpMethod": "GET",
+              "path": "/health",
+              "stage": "test",
+              "identity": {
+                "sourceIp": "127.0.0.1"
+              }
+            },
+            "isBase64Encoded": false
+          }' > test_payload.json
           
           aws lambda invoke \
             --function-name ${{ env.LAMBDA_NAME }}-test \
@@ -186,7 +205,26 @@ jobs:
 
       - name: Teste de funcionamento - Root endpoint
         run: |
-          echo '{"httpMethod": "GET", "path": "/", "headers": {}, "body": null}' > test_root_payload.json
+          echo '{
+            "httpMethod": "GET",
+            "path": "/",
+            "headers": {},
+            "body": null,
+            "pathParameters": {
+              "proxy": ""
+            },
+            "queryStringParameters": null,
+            "requestContext": {
+              "requestId": "test-request-id-root",
+              "httpMethod": "GET",
+              "path": "/",
+              "stage": "test",
+              "identity": {
+                "sourceIp": "127.0.0.1"
+              }
+            },
+            "isBase64Encoded": false
+          }' > test_root_payload.json
           
           aws lambda invoke \
             --function-name ${{ env.LAMBDA_NAME }}-test \
