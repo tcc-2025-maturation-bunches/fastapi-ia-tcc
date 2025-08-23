@@ -86,7 +86,7 @@ jobs:
           pip install -r requirements.txt -t deployment/
           
           # Instalar shared-libs no diretório de deployment
-          cd ../../shared-libs
+          cd ../shared-libs
           pip install . -t ../${{ env.WORKING_DIR }}/deployment/
           cd ../${{ env.WORKING_DIR }}
           
