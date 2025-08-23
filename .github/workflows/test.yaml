@@ -200,6 +200,11 @@ jobs:
           
           aws lambda invoke \
             --function-name ${{ env.LAMBDA_NAME }}-test \
+            --payload fileb://test_payload.json \
+            response.json
+          
+          echo "Resposta da Lambda:"
+          cat response.json
 
       - name: Verificar logs da Lambda
         if: always()
