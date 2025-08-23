@@ -13,7 +13,7 @@ class SQSClient:
     def __init__(self, queue_url: str, region: str = "us-east-1"):
         if not queue_url:
             raise ValueError("queue_url é obrigatório")
-            
+
         self.queue_url = queue_url
         self.region = region
         self.session = aioboto3.Session()

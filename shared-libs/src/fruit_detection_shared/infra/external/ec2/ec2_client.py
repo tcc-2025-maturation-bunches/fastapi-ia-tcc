@@ -10,8 +10,8 @@ class EC2Client:
     def __init__(self, base_url: str, timeout: int = 30):
         if not base_url:
             raise ValueError("base_url é obrigatório")
-            
-        self.base_url = base_url.rstrip('/')
+
+        self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.detect_endpoint = f"{self.base_url}/detect"
         self.combined_endpoint = f"{self.base_url}/process-combined"

@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - develop
     paths:
       - 'lambda-processing-ai/**'
       - 'shared-libs/**'
@@ -12,7 +11,7 @@ on:
   pull_request:
     branches:
       - main
-      - develop
+    types: [opened, synchronize, reopened]
     paths:
       - 'lambda-processing-ai/**'
       - 'shared-libs/**'
@@ -25,6 +24,8 @@ env:
   TAG_ENVIRONMENT: graduacao
   TAG_PROJECT: TCC
   TAG_GROUP: CICD15
+  TAG_OWNER: bossini
+  TAG_CREATOR: 22.01019-0
 
 permissions:
   id-token: write
@@ -73,7 +74,7 @@ jobs:
     name: Build e Validação
     runs-on: ubuntu-latest
     needs: test
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/'))
     
     steps:
       - name: Checkout do código
@@ -110,12 +111,12 @@ jobs:
           path: lambda-processing-ai/lambda-processing-ai.zip
           retention-days: 7
 
-  deploy-dev:
-    name: Implantação para Desenvolvimento
+  deploy-hom:
+    name: Implantação para Homologação
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/develop'
-    environment: development
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/')
+    environment: homologation
     
     permissions:
       id-token: write
@@ -132,37 +133,37 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_KEY }}
-          role-session-name: github-actions-lambda-processing-dev
+          role-session-name: github-actions-lambda-processing-hom
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Implantar no Lambda
         run: |
           aws lambda update-function-code \
-            --function-name ${{ env.LAMBDA_NAME }}-dev \
+            --function-name ${{ env.LAMBDA_NAME }}-hom \
             --zip-file fileb://lambda-processing-ai.zip \
             --publish
 
       - name: Aplicar tags na função Lambda
         run: |
           aws lambda tag-resource \
-            --resource arn:aws:lambda:${{ env.AWS_REGION }}:$(aws sts get-caller-identity --query Account --output text):function:${{ env.LAMBDA_NAME }}-dev \
+            --resource arn:aws:lambda:${{ env.AWS_REGION }}:$(aws sts get-caller-identity --query Account --output text):function:${{ env.LAMBDA_NAME }}-hom \
             --tags \
               environment=${{ env.TAG_ENVIRONMENT }} \
               project=${{ env.TAG_PROJECT }} \
               group=${{ env.TAG_GROUP }} \
-              branch=develop \
+              branch=${{ github.head_ref }} \
               deployed_by=github-actions \
               deployment_date=$(date +%Y-%m-%d)
 
       - name: Aguardar atualização do Lambda
         run: |
           aws lambda wait function-updated \
-            --function-name ${{ env.LAMBDA_NAME }}-dev
+            --function-name ${{ env.LAMBDA_NAME }}-hom
 
       - name: Aplicar tags no CloudWatch Log Group
         run: |
-          LOG_GROUP="/aws/lambda/${{ env.LAMBDA_NAME }}-dev"
-          
+          LOG_GROUP="/aws/lambda/${{ env.LAMBDA_NAME }}-hom"
+
           EXISTING_LOG_GROUP=$(aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query 'logGroups[0].logGroupName' --output text)
           if [ -z "$EXISTING_LOG_GROUP" ] || [ "$EXISTING_LOG_GROUP" = "None" ]; then
             aws logs create-log-group --log-group-name "$LOG_GROUP"
@@ -173,13 +174,58 @@ jobs:
             --tags \
               environment=${{ env.TAG_ENVIRONMENT }} \
               project=${{ env.TAG_PROJECT }} \
-              group=${{ env.TAG_GROUP }}
+              group=${{ env.TAG_GROUP }} \
+              owner=${{ env.TAG_OWNER }} \
+              creator=${{ env.TAG_CREATOR }}
+
+      - name: Teste de funcionamento - Health Check
+        run: |
+          echo '{
+            "version": "2.0",
+            "routeKey": "GET /health",
+            "rawPath": "/health",
+            "rawQueryString": "",
+            "headers": {
+              "accept": "application/json",
+              "content-length": "0",
+              "host": "lambda-url.us-east-1.on.aws",
+              "user-agent": "curl/8.0.0",
+              "x-amzn-trace-id": "Root=1-abcdef-0123456789"
+            },
+            "requestContext": {
+              "accountId": "anonymous",
+              "apiId": "api-id",
+              "domainName": "lambda-url.us-east-1.on.aws",
+              "domainPrefix": "lambda-url",
+              "http": {
+                "method": "GET",
+                "path": "/health",
+                "protocol": "HTTP/1.1",
+                "sourceIp": "127.0.0.1",
+                "userAgent": "curl/8.0.0"
+              },
+              "requestId": "test-request-id-health",
+              "routeKey": "GET /health",
+              "stage": "$default",
+              "time": "23/Aug/2025:18:00:00 +0000",
+              "timeEpoch": 1756000800000
+            },
+            "isBase64Encoded": false
+          }' > test_payload.json
+          
+          aws lambda invoke \
+            --function-name ${{ env.LAMBDA_NAME }}-hom \
+            --payload fileb://test_payload.json \
+            response.json
+          
+          echo "Resposta da Lambda:"
+          cat response.json
 
   deploy-prod:
     name: Implantação para Produção
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: production
     
     permissions:
@@ -214,6 +260,8 @@ jobs:
               environment=${{ env.TAG_ENVIRONMENT }} \
               project=${{ env.TAG_PROJECT }} \
               group=${{ env.TAG_GROUP }} \
+              owner=${{ env.TAG_OWNER }} \
+              creator=${{ env.TAG_CREATOR }} \
               branch=main \
               deployed_by=github-actions \
               deployment_date=$(date +%Y-%m-%d)
@@ -237,7 +285,52 @@ jobs:
             --tags \
               environment=${{ env.TAG_ENVIRONMENT }} \
               project=${{ env.TAG_PROJECT }} \
-              group=${{ env.TAG_GROUP }}
+              group=${{ env.TAG_GROUP }} \
+              owner=${{ env.TAG_OWNER }} \
+              creator=${{ env.TAG_CREATOR }}
+
+      - name: Teste de funcionamento - Health Check
+        run: |
+          echo '{
+            "version": "2.0",
+            "routeKey": "GET /health",
+            "rawPath": "/health",
+            "rawQueryString": "",
+            "headers": {
+              "accept": "application/json",
+              "content-length": "0",
+              "host": "lambda-url.us-east-1.on.aws",
+              "user-agent": "curl/8.0.0",
+              "x-amzn-trace-id": "Root=1-abcdef-0123456789"
+            },
+            "requestContext": {
+              "accountId": "anonymous",
+              "apiId": "api-id",
+              "domainName": "lambda-url.us-east-1.on.aws",
+              "domainPrefix": "lambda-url",
+              "http": {
+                "method": "GET",
+                "path": "/health",
+                "protocol": "HTTP/1.1",
+                "sourceIp": "127.0.0.1",
+                "userAgent": "curl/8.0.0"
+              },
+              "requestId": "test-request-id-health",
+              "routeKey": "GET /health",
+              "stage": "$default",
+              "time": "23/Aug/2025:18:00:00 +0000",
+              "timeEpoch": 1756000800000
+            },
+            "isBase64Encoded": false
+          }' > test_payload.json
+          
+          aws lambda invoke \
+            --function-name ${{ env.LAMBDA_NAME }}-hom \
+            --payload fileb://test_payload.json \
+            response.json
+          
+          echo "Resposta da Lambda:"
+          cat response.json
 
       - name: Notificar equipe sobre implantação no Discord
         if: always()
@@ -247,5 +340,5 @@ jobs:
           TITLE="Lambda Processing AI - $STATUS"
           
           curl -H "Content-Type: application/json" \
-            -d "{\"embeds\": [{\"title\": \"$TITLE\", \"color\": $COLOR, \"fields\": [{\"name\": \"Tags\", \"value\": \"environment=${{ env.TAG_ENVIRONMENT }}, project=${{ env.TAG_PROJECT }}, group=${{ env.TAG_GROUP }}\"}]}]}" \
+            -d "{\"embeds\": [{\"title\": \"$TITLE\", \"color\": $COLOR, \"fields\": [{\"name\": \"Tags\", \"value\": \"environment=${{ env.TAG_ENVIRONMENT }}, project=${{ env.TAG_PROJECT }}, group=${{ env.TAG_GROUP }}, owner=${{ env.TAG_OWNER }}, creator=${{ env.TAG_CREATOR }}\"}]}]}" \
             ${{ secrets.DISCORD_WEBHOOK }}

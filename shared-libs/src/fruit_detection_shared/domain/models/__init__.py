@@ -51,7 +51,7 @@ from .status_models import HealthCheckResponse, ServiceStatusResponse
 
 __all__ = [
     "BoundingBox",
-    "ContractDetectionSummary", 
+    "ContractDetectionSummary",
     "ImageDimensions",
     "ImageMetadata",
     "MaturationDistribution",
@@ -84,7 +84,7 @@ __all__ = [
     "PresignedUrlRequest",
     "PresignedUrlResponse",
     "ProcessImageRequest",
-    "ProcessingResponse", 
+    "ProcessingResponse",
     "ProcessingStatusResponse",
     "HealthCheckResponse",
     "ServiceStatusResponse",

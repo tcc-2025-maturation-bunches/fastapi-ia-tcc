@@ -19,12 +19,12 @@ from .mappers import ContractResponseMapper, RequestSummaryMapper
 
 __all__ = [
     "CombinedResult",
-    "Device", 
+    "Device",
     "Image",
     "CombinedContractResponse",
     "CombinedProcessingRequest",
     "ContractDetection",
-    "ContractDetectionResult", 
+    "ContractDetectionResult",
     "ContractDetectionSummary",
     "ProcessingMetadata",
     "DynamoClient",

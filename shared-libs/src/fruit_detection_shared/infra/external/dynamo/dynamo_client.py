@@ -26,7 +26,7 @@ class DynamoClient:
     def __init__(self, table_name: str, region: str = "us-east-1"):
         if not table_name:
             raise ValueError("table_name é obrigatório")
-            
+
         self.table_name = table_name
         self.region = region
         self.client = boto3.resource("dynamodb", region_name=self.region)

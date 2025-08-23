@@ -13,18 +13,13 @@ class S3Client:
     def __init__(self, bucket_name: str, region: str = "us-east-1"):
         if not bucket_name:
             raise ValueError("bucket_name é obrigatório")
-            
+
         self.bucket_name = bucket_name
         self.region = region
         self.client = boto3.client("s3", region_name=self.region)
         logger.info(f"Inicializando cliente S3 para bucket {self.bucket_name}")
 
-    def generate_presigned_url(
-        self,
-        operation: str,
-        Params: Dict[str, Any],
-        ExpiresIn: int = 900
-    ) -> str:
+    def generate_presigned_url(self, operation: str, Params: Dict[str, Any], ExpiresIn: int = 900) -> str:
         try:
             response = self.client.generate_presigned_url(
                 operation,
