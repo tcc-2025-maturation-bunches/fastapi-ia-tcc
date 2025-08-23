@@ -5,7 +5,7 @@ on:
     branches:
       - oidc-aws-ci
     paths:
-      - 'lambdas/request-handler/**'
+      - 'lambda-request-handler/**'
       - 'shared-libs/**'
       - '.github/workflows/test.yaml'
 
