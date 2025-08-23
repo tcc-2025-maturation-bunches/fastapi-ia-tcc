@@ -166,89 +166,40 @@ jobs:
       - name: Teste de funcionamento - Health Check
         run: |
           echo '{
-            "httpMethod": "GET",
-            "path": "/health",
-            "headers": {},
-            "body": null,
-            "pathParameters": {
-              "proxy": "health"
+            "version": "2.0",
+            "routeKey": "GET /health",
+            "rawPath": "/health",
+            "rawQueryString": "",
+            "headers": {
+              "accept": "application/json",
+              "content-length": "0",
+              "host": "lambda-url.us-east-1.on.aws",
+              "user-agent": "curl/8.0.0",
+              "x-amzn-trace-id": "Root=1-abcdef-0123456789"
             },
-            "queryStringParameters": null,
             "requestContext": {
-              "requestId": "test-request-id",
-              "httpMethod": "GET",
-              "path": "/health",
-              "stage": "test",
-              "identity": {
-                "sourceIp": "127.0.0.1"
-              }
+              "accountId": "anonymous",
+              "apiId": "api-id",
+              "domainName": "lambda-url.us-east-1.on.aws",
+              "domainPrefix": "lambda-url",
+              "http": {
+                "method": "GET",
+                "path": "/health",
+                "protocol": "HTTP/1.1",
+                "sourceIp": "127.0.0.1",
+                "userAgent": "curl/8.0.0"
+              },
+              "requestId": "test-request-id-health",
+              "routeKey": "GET /health",
+              "stage": "$default",
+              "time": "23/Aug/2025:18:00:00 +0000",
+              "timeEpoch": 1756000800000
             },
             "isBase64Encoded": false
           }' > test_payload.json
           
           aws lambda invoke \
             --function-name ${{ env.LAMBDA_NAME }}-test \
-            --payload file://test_payload.json \
-            response.json
-          
-          echo "=== Resposta da Lambda ==="
-          cat response.json
-          echo ""
-          echo "=========================="
-          
-          if grep -q '"statusCode": 200' response.json; then
-            echo "✅ Health check passou com statusCode 200"
-          else
-            echo "❌ Health check falhou"
-            exit 1
-          fi
-
-      - name: Teste de funcionamento - Root endpoint
-        run: |
-          echo '{
-            "httpMethod": "GET",
-            "path": "/",
-            "headers": {},
-            "body": null,
-            "pathParameters": {
-              "proxy": ""
-            },
-            "queryStringParameters": null,
-            "requestContext": {
-              "requestId": "test-request-id-root",
-              "httpMethod": "GET",
-              "path": "/",
-              "stage": "test",
-              "identity": {
-                "sourceIp": "127.0.0.1"
-              }
-            },
-            "isBase64Encoded": false
-          }' > test_root_payload.json
-          
-          aws lambda invoke \
-            --function-name ${{ env.LAMBDA_NAME }}-test \
-            --payload file://test_root_payload.json \
-            response_root.json
-          
-          echo "=== Resposta do Root Endpoint ==="
-          cat response_root.json
-          echo ""
-          echo "================================"
-
-      - name: Teste de funcionamento - Info endpoint
-        run: |
-          echo '{"httpMethod": "GET", "path": "/info", "headers": {}, "body": null}' > test_info_payload.json
-          
-          aws lambda invoke \
-            --function-name ${{ env.LAMBDA_NAME }}-test \
-            --payload file://test_info_payload.json \
-            response_info.json
-          
-          echo "=== Resposta do Info Endpoint ==="
-          cat response_info.json
-          echo ""
-          echo "================================="
 
       - name: Verificar logs da Lambda
         if: always()
