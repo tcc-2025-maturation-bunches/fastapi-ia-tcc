@@ -6,20 +6,37 @@ from typing import Any, BinaryIO, Dict, Optional
 import boto3
 from botocore.exceptions import ClientError
 
-from src.app.config import settings
-
 logger = logging.getLogger(__name__)
 
 
 class S3Client:
-
-    def __init__(self, bucket_name: str, region: Optional[str] = None):
+    def __init__(self, bucket_name: str, region: str = "us-east-1"):
+        if not bucket_name:
+            raise ValueError("bucket_name é obrigatório")
+            
         self.bucket_name = bucket_name
-        self.region = region or settings.AWS_REGION
+        self.region = region
         self.client = boto3.client("s3", region_name=self.region)
         logger.info(f"Inicializando cliente S3 para bucket {self.bucket_name}")
 
-    async def generate_presigned_url(
+    def generate_presigned_url(
+        self,
+        operation: str,
+        Params: Dict[str, Any],
+        ExpiresIn: int = 900
+    ) -> str:
+        try:
+            response = self.client.generate_presigned_url(
+                operation,
+                Params=Params,
+                ExpiresIn=ExpiresIn,
+            )
+            return response
+        except ClientError as e:
+            logger.error(f"Erro ao gerar URL pré-assinada: {e}")
+            raise
+
+    async def generate_presigned_url_async(
         self, key: str, content_type: str, expires_in: timedelta = timedelta(minutes=15)
     ) -> Dict[str, Any]:
         try:

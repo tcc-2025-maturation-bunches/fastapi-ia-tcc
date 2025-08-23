@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 
 import boto3
 from botocore.exceptions import ClientError
+from fruit_detection_shared.infra.external.dynamo.dynamo_client import DynamoClient
 
 from src.app.config import settings
 from src.utils.validators import validate_image_metadata, validate_request_id, validate_user_id
@@ -24,9 +25,16 @@ class ProcessingStatus(Enum):
 
 
 class StatusService:
-    def __init__(self):
-        self.dynamodb = boto3.resource("dynamodb", region_name=settings.AWS_REGION)
-        self.table = self.dynamodb.Table(settings.DYNAMODB_TABLE_NAME)
+    def __init__(self, table_name: Optional[str] = None, region: Optional[str] = None):
+        table_name = table_name or settings.DYNAMODB_TABLE_NAME
+        region = region or settings.AWS_REGION
+        
+        self.dynamo_client = DynamoClient(table_name=table_name, region=region)
+        self.table_name = table_name
+        self.region = region
+        
+        self.dynamodb = boto3.resource("dynamodb", region_name=region)
+        self.table = self.dynamodb.Table(table_name)
 
     async def create_initial_status(
         self, request_id: str, user_id: str, image_url: str, metadata: Dict[str, Any]

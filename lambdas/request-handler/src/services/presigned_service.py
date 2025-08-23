@@ -12,11 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 class PresignedURLService:
-    def __init__(self):
-        self.images_client = S3Client(bucket_name=settings.S3_IMAGES_BUCKET)
-        self.results_client = S3Client(bucket_name=settings.S3_RESULTS_BUCKET)
-        self.images_bucket = settings.S3_IMAGES_BUCKET
-        self.results_bucket = settings.S3_RESULTS_BUCKET
+    def __init__(self, images_bucket: Optional[str] = None, results_bucket: Optional[str] = None, region: Optional[str] = None):
+        self.images_bucket = images_bucket or settings.S3_IMAGES_BUCKET
+        self.results_bucket = results_bucket or settings.S3_RESULTS_BUCKET
+        region = region or settings.AWS_REGION
+        
+        self.images_client = S3Client(bucket_name=self.images_bucket, region=region)
+        self.results_client = S3Client(bucket_name=self.results_bucket, region=region)
 
     async def generate_upload_url(
         self, filename: str, content_type: str, user_id: str, purpose: str = "image"  # "image" ou "result"

@@ -14,9 +14,15 @@ logger = logging.getLogger(__name__)
 
 
 class QueueService:
-    def __init__(self):
-        self.sqs_client = SQSClient(queue_url=settings.SQS_QUEUE_URL)
-        self.queue_url = settings.SQS_QUEUE_URL
+    def __init__(self, queue_url: Optional[str] = None, region: Optional[str] = None):
+        queue_url = queue_url or settings.SQS_QUEUE_URL
+        region = region or settings.AWS_REGION
+        
+        self.sqs_client = SQSClient(queue_url=queue_url, region=region)
+        self.queue_url = queue_url
+
+    def validate_queue_connection(self) -> bool:
+        return self.sqs_client.validate_connection()
 
     async def send_processing_message(
         self,
@@ -127,6 +133,3 @@ class QueueService:
         except ClientError as e:
             logger.exception(f"Error getting queue attributes: {e}")
             return {"error": str(e), "messages_available": 0, "messages_in_flight": 0}
-
-    def validate_queue_connection(self) -> bool:
-        return self.sqs_client.validate_connection()
