@@ -11,6 +11,6 @@ from .sqs import SQSClient
 __all__ = [
     "DynamoClient",
     "EC2Client",
-    "S3Client", 
+    "S3Client",
     "SQSClient",
 ]

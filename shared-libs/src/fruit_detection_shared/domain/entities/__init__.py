@@ -9,6 +9,6 @@ from .image import Image
 
 __all__ = [
     "CombinedResult",
-    "Device", 
+    "Device",
     "Image",
 ]

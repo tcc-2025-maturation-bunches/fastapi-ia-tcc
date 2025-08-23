@@ -7,8 +7,6 @@ from typing import Any, Dict, List, Optional
 import boto3
 from botocore.exceptions import ClientError
 
-from src.app.config import settings
-
 logger = logging.getLogger(__name__)
 
 
@@ -25,9 +23,12 @@ def floats_to_decimals(obj: Any) -> Any:
 
 
 class DynamoClient:
-    def __init__(self, table_name: Optional[str] = None, region: Optional[str] = None):
-        self.table_name = table_name or settings.DYNAMODB_TABLE_NAME
-        self.region = region or settings.AWS_REGION
+    def __init__(self, table_name: str, region: str = "us-east-1"):
+        if not table_name:
+            raise ValueError("table_name é obrigatório")
+
+        self.table_name = table_name
+        self.region = region
         self.client = boto3.resource("dynamodb", region_name=self.region)
         self.table = self.client.Table(self.table_name)
         logger.info(f"Inicializando cliente DynamoDB para tabela {self.table_name}")

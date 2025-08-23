@@ -1,0 +1,159 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Lambda Request Handler para Sistema de Detecção de Frutas
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - hom
+      - prod
+    Description: Ambiente de implantação
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 1024
+    Runtime: python3.13
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        LOG_LEVEL: INFO
+        AWS_REGION: !Ref AWS::Region
+
+Resources:
+  RequestHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub fruit-detection-${Environment}-request-handler
+      CodeUri: .
+      Handler: src.app.lambda_handler.lambda_handler
+      Runtime: python3.13
+      MemorySize: 1024
+      Timeout: 30
+      Environment:
+        Variables:
+          SQS_QUEUE_URL: !Sub https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/fruit-detection-${Environment}-processing-queue.fifo
+          DYNAMODB_TABLE_NAME: !Sub fruit-detection-${Environment}-results
+          S3_IMAGES_BUCKET: !Sub fruit-detection-${Environment}-images
+          S3_RESULTS_BUCKET: !Sub fruit-detection-${Environment}-results
+          PRESIGNED_URL_EXPIRY_MINUTES: 15
+          MIN_DETECTION_CONFIDENCE: 0.6
+          MIN_MATURATION_CONFIDENCE: 0.7
+      
+      Events:
+        ApiGatewayProxyRoot:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /{proxy+}
+            Method: ANY
+        
+        ApiGatewayRoot:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /
+            Method: ANY
+      
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+                - sqs:GetQueueAttributes
+              Resource: !Sub arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:*
+            
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/fruit-detection-${Environment}-results
+                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/fruit-detection-${Environment}-results/index/*
+            
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:PutObjectAcl
+                - s3:GetObject
+                - s3:HeadObject
+                - s3:HeadBucket
+              Resource:
+                - !Sub arn:aws:s3:::fruit-detection-${Environment}-images/*
+                - !Sub arn:aws:s3:::fruit-detection-${Environment}-results/*
+                - !Sub arn:aws:s3:::fruit-detection-${Environment}-images
+                - !Sub arn:aws:s3:::fruit-detection-${Environment}-results
+
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub fruit-detection-${Environment}-request-handler-api
+      StageName: !Ref Environment
+      TracingEnabled: true
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+      DefinitionBody:
+        openapi: '3.0.1'
+        info:
+          title: !Sub ${AWS::StackName}-API
+          version: '1.0.0'
+        paths:
+          /:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RequestHandlerFunction.Arn}/invocations
+                passthroughBehavior: when_no_match
+                httpMethod: POST
+                type: aws_proxy
+              responses:
+                '200':
+                  description: 'Success'
+                  headers:
+                    Access-Control-Allow-Origin:
+                      schema:
+                        type: string
+          
+          /{proxy+}:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RequestHandlerFunction.Arn}/invocations
+                passthroughBehavior: when_no_match
+                httpMethod: POST
+                type: aws_proxy
+              responses:
+                '200':
+                  description: 'Success'
+                  headers:
+                    Access-Control-Allow-Origin:
+                      schema:
+                        type: string
+
+  ApiGatewayInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref RequestHandlerFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/*
+
+Outputs:
+  RequestHandlerFunctionArn:
+    Description: ARN da função Lambda
+    Value: !GetAtt RequestHandlerFunction.Arn
+    
+  ApiGatewayUrl:
+    Description: URL do API Gateway
+    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
+    
+  ApiGatewayId:
+    Description: ID do API Gateway
+    Value: !Ref ApiGateway

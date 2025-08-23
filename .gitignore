@@ -177,3 +177,6 @@ cython_debug/
 .aws-sam/
 **/.aws-sam/
 samconfig.toml
+
+# PyCharm
+.idea/

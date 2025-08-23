@@ -1,7 +1,7 @@
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
-from src.shared.domain.models.combined_models import (
+from fruit_detection_shared.domain.models.combined_models import (
     ContractDetection,
     ContractDetectionResult,
     ContractDetectionSummary,
@@ -151,7 +151,7 @@ class CombinedResult:
                 maturation_data = res.get("maturation_level")
                 maturation_level = None
                 if maturation_data:
-                    from src.shared.domain.models.base_models import MaturationInfo
+                    from fruit_detection_shared.domain.models.base_models import MaturationInfo
 
                     maturation_level = MaturationInfo(
                         score=safe_float(maturation_data.get("score", 0)),
@@ -183,7 +183,7 @@ class CombinedResult:
             if maturation_dist:
                 maturation_dist = {k: int(v) if isinstance(v, str) else v for k, v in maturation_dist.items()}
 
-            from src.shared.domain.models.base_models import ImageDimensions, MaturationDistribution
+            from fruit_detection_shared.domain.models.base_models import ImageDimensions, MaturationDistribution
 
             processing_metadata = ProcessingMetadata(
                 image_dimensions=ImageDimensions(**image_dimensions) if image_dimensions else None,

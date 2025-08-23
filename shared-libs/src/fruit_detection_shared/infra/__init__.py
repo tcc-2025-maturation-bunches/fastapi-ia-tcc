@@ -7,7 +7,7 @@ from .external import DynamoClient, EC2Client, S3Client, SQSClient
 
 __all__ = [
     "DynamoClient",
-    "EC2Client", 
+    "EC2Client",
     "S3Client",
     "SQSClient",
 ]
