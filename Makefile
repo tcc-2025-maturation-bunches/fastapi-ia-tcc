@@ -5,22 +5,23 @@ PYTEST = pytest
 BLACK = black
 RUFF = ruff
 COVERAGE = coverage
-CHECK_DIRS = $(shell for /d %%d in (lambda-*,shared-libs) do @echo %%d)
+SRC_DIR = lambda-processing-ai lambda-request-handler lambda-results-query
+SHARED_DIR = shared-libs
 PIP = pip
 
 format:
-	$(BLACK) $(CHECK_DIRS)
-	$(RUFF) check --fix $(CHECK_DIRS)
+	$(BLACK) $(SRC_DIR) $(SHARED_DIR)
+	$(RUFF) check --fix $(SRC_DIR) $(SHARED_DIR)
 
 check:
-	$(BLACK) --check $(CHECK_DIRS)
-	$(RUFF) check $(CHECK_DIRS)
+	$(BLACK) --check $(SRC_DIR) $(SHARED_DIR)
+	$(RUFF) check $(SRC_DIR) $(SHARED_DIR)
 
 lint:
-	$(RUFF) check $(CHECK_DIRS)
+	$(RUFF) check $(SRC_DIR) $(SHARED_DIR)
 
 lint-fix:
-	$(RUFF) check --fix $(CHECK_DIRS)
+	$(RUFF) check --fix $(SRC_DIR) $(SHARED_DIR)
 
 test:
 	$(PYTEST) -xvs
