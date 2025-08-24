@@ -153,13 +153,7 @@ jobs:
         run: |
           aws lambda tag-resource \
             --resource arn:aws:lambda:${{ env.AWS_REGION }}:$(aws sts get-caller-identity --query Account --output text):function:${{ env.LAMBDA_NAME }}-hom \
-            --tags \
-              environment=${{ env.TAG_ENVIRONMENT }} \
-              project=${{ env.TAG_PROJECT }} \
-              group=${{ env.TAG_GROUP }} \
-              branch=${{ github.head_ref }} \
-              deployed_by=github-actions \
-              deployment_date=$(date +%Y-%m-%d)
+            --tags environment=${{ env.TAG_ENVIRONMENT }},project=${{ env.TAG_PROJECT }},group=${{ env.TAG_GROUP }},branch=${{ github.head_ref }},deployed_by=github-actions,deployment_date=$(date +%Y-%m-%d)
 
       - name: Aguardar atualização do Lambda
         run: |
@@ -171,18 +165,13 @@ jobs:
           LOG_GROUP="/aws/lambda/${{ env.LAMBDA_NAME }}-hom"
 
           EXISTING_LOG_GROUP=$(aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query 'logGroups[0].logGroupName' --output text)
-          if [ -z "$EXISTING_LOG_GROUP" ] || [ "$EXISTING_LOG_GROUP" = "None" ] || [ "$EXISTING_LOG_GROUP" = "null" ]; then
+          if [ -z "$EXISTING_LOG_GROUP" ] || [ "$EXISTING_LOG_GROUP" = "None" ]; then
             aws logs create-log-group --log-group-name "$LOG_GROUP"
           fi
           
           aws logs tag-log-group \
             --log-group-name "$LOG_GROUP" \
-            --tags \
-              environment=${{ env.TAG_ENVIRONMENT }} \
-              project=${{ env.TAG_PROJECT }} \
-              group=${{ env.TAG_GROUP }} \
-              owner=${{ env.TAG_OWNER }} \
-              creator=${{ env.TAG_CREATOR }}
+            --tags environment=${{ env.TAG_ENVIRONMENT }},project=${{ env.TAG_PROJECT }},group=${{ env.TAG_GROUP }},owner=${{ env.TAG_OWNER }},creator=${{ env.TAG_CREATOR }}
 
       - name: Teste de funcionamento - Health Check
         run: |
@@ -268,15 +257,7 @@ jobs:
         run: |
           aws lambda tag-resource \
             --resource arn:aws:lambda:${{ env.AWS_REGION }}:$(aws sts get-caller-identity --query Account --output text):function:${{ env.LAMBDA_NAME }}-prod \
-            --tags \
-              environment=${{ env.TAG_ENVIRONMENT }} \
-              project=${{ env.TAG_PROJECT }} \
-              group=${{ env.TAG_GROUP }} \
-              owner=${{ env.TAG_OWNER }} \
-              creator=${{ env.TAG_CREATOR }} \
-              branch=main \
-              deployed_by=github-actions \
-              deployment_date=$(date +%Y-%m-%d)
+            --tags environment=${{ env.TAG_ENVIRONMENT }},project=${{ env.TAG_PROJECT }},group=${{ env.TAG_GROUP }},owner=${{ env.TAG_OWNER }},creator=${{ env.TAG_CREATOR }},branch=main,deployed_by=github-actions,deployment_date=$(date +%Y-%m-%d)
 
       - name: Aguardar atualização do Lambda
         run: |
@@ -286,19 +267,15 @@ jobs:
       - name: Aplicar tags no CloudWatch Log Group
         run: |
           LOG_GROUP="/aws/lambda/${{ env.LAMBDA_NAME }}-prod"
-          
+
           EXISTING_LOG_GROUP=$(aws logs describe-log-groups --log-group-name-prefix "$LOG_GROUP" --query 'logGroups[0].logGroupName' --output text)
-          if [ -z "$EXISTING_LOG_GROUP" ] || [ "$EXISTING_LOG_GROUP" = "None" ] || [ "$EXISTING_LOG_GROUP" = "null" ]; then
+          if [ -z "$EXISTING_LOG_GROUP" ] || [ "$EXISTING_LOG_GROUP" = "None" ]; then
             aws logs create-log-group --log-group-name "$LOG_GROUP"
           fi
+          
           aws logs tag-log-group \
             --log-group-name "$LOG_GROUP" \
-            --tags \
-              environment=${{ env.TAG_ENVIRONMENT }} \
-              project=${{ env.TAG_PROJECT }} \
-              group=${{ env.TAG_GROUP }} \
-              owner=${{ env.TAG_OWNER }} \
-              creator=${{ env.TAG_CREATOR }}
+            --tags environment=${{ env.TAG_ENVIRONMENT }},project=${{ env.TAG_PROJECT }},group=${{ env.TAG_GROUP }},owner=${{ env.TAG_OWNER }},creator=${{ env.TAG_CREATOR }}
 
       - name: Teste de funcionamento - Health Check
         run: |
@@ -336,7 +313,7 @@ jobs:
           }' > test_payload.json
           
           aws lambda invoke \
-            --function-name ${{ env.LAMBDA_NAME }}-hom \
+            --function-name ${{ env.LAMBDA_NAME }}-prod \
             --payload fileb://test_payload.json \
             response.json
           
