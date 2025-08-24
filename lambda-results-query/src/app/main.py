@@ -36,6 +36,8 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs" if not settings.is_production() else None,
     redoc_url="/redoc" if not settings.is_production() else None,
+    redirect_slashes=False,
+    root_path=f"/{settings.ENVIRONMENT}" if not settings.is_development() else None,
 )
 
 app.add_middleware(
