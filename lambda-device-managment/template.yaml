@@ -1,0 +1,294 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Lambda Device Management para Sistema de Detecção de Frutas
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - hom
+      - prod
+    Description: Ambiente de implantação
+  
+  DynamoDBTableName:
+    Type: String
+    Description: Nome da tabela DynamoDB principal
+  
+  SNSProcessingCompleteTopic:
+    Type: String
+    Description: ARN do tópico SNS para notificações de processamento
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 1024
+    Runtime: python3.13
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        LOG_LEVEL: INFO
+        AWS_REGION: !Ref AWS::Region
+
+Resources:
+  DeviceManagementFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub fruit-detection-${Environment}-device-management
+      CodeUri: .
+      Handler: src.app.lambda_handler.lambda_handler
+      Runtime: python3.13
+      MemorySize: 1024
+      Timeout: 30
+      Tracing: Active
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME: !Ref DynamoDBTableName
+          SNS_PROCESSING_COMPLETE_TOPIC: !Ref SNSProcessingCompleteTopic
+          HEARTBEAT_TIMEOUT_MINUTES: 5
+          OFFLINE_CHECK_INTERVAL_MINUTES: 10
+          DEFAULT_CAPTURE_INTERVAL: 300
+          DEFAULT_IMAGE_QUALITY: 85
+          DEFAULT_HEARTBEAT_INTERVAL: 60
+      
+      Events:
+        ApiGatewayProxyRoot:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /{proxy+}
+            Method: ANY
+        
+        ApiGatewayRoot:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /
+            Method: ANY
+        
+        OfflineCheckSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(10 minutes)
+            Description: Verificar dispositivos offline a cada 10 minutos
+            Input: |
+              {
+                "source": "aws.events",
+                "detail-type": "Scheduled Event",
+                "detail": {
+                  "action": "check_offline_devices"
+                }
+              }
+        
+        SNSProcessingComplete:
+          Type: SNS
+          Properties:
+            Topic: !Ref SNSProcessingCompleteTopic
+            FilterPolicy:
+              event_type:
+                - processing_complete
+      
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBTableName}
+                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DynamoDBTableName}/index/*
+            
+            - Effect: Allow
+              Action:
+                - sns:Publish
+                - sns:Subscribe
+                - sns:GetTopicAttributes
+              Resource: !Ref SNSProcessingCompleteTopic
+            
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: '*'
+            
+            - Effect: Allow
+              Action:
+                - xray:PutTraceSegments
+                - xray:PutTelemetryRecords
+              Resource: '*'
+
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub fruit-detection-${Environment}-device-management-api
+      StageName: !Ref Environment
+      TracingEnabled: true
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+      DefinitionBody:
+        openapi: '3.0.1'
+        info:
+          title: !Sub ${AWS::StackName}-Device-Management-API
+          version: '1.0.0'
+        paths:
+          /:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DeviceManagementFunction.Arn}/invocations
+                passthroughBehavior: when_no_match
+                httpMethod: POST
+                type: aws_proxy
+              responses:
+                '200':
+                  description: 'Success'
+                  headers:
+                    Access-Control-Allow-Origin:
+                      schema:
+                        type: string
+          
+          /{proxy+}:
+            x-amazon-apigateway-any-method:
+              x-amazon-apigateway-integration:
+                uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DeviceManagementFunction.Arn}/invocations
+                passthroughBehavior: when_no_match
+                httpMethod: POST
+                type: aws_proxy
+              responses:
+                '200':
+                  description: 'Success'
+                  headers:
+                    Access-Control-Allow-Origin:
+                      schema:
+                        type: string
+
+  ApiGatewayInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DeviceManagementFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/*
+
+  SNSInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DeviceManagementFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref SNSProcessingCompleteTopic
+
+  DeviceManagementLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${DeviceManagementFunction}
+      RetentionInDays: 7
+
+  # CloudWatch Alarms
+  DeviceManagementErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub fruit-detection-${Environment}-device-management-errors
+      AlarmDescription: Dispara quando a Lambda Device Management apresenta erros
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref DeviceManagementFunction
+
+  DeviceManagementThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub fruit-detection-${Environment}-device-management-throttles
+      AlarmDescription: Dispara quando a Lambda Device Management está sendo limitada
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref DeviceManagementFunction
+
+  DeviceManagementDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub fruit-detection-${Environment}-device-management-duration
+      AlarmDescription: Dispara quando a Lambda Device Management tem alta latência
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 25000
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref DeviceManagementFunction
+
+  # Custom Metrics para dispositivos
+  OfflineDevicesMetric:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref DeviceManagementLogGroup
+      FilterPattern: '[timestamp, level="WARNING", message="Dispositivos detectados como offline*"]'
+      MetricTransformations:
+        - MetricNamespace: FruitDetection/Devices
+          MetricName: OfflineDevicesDetected
+          MetricValue: "1"
+          DefaultValue: 0
+
+  HeartbeatSuccessMetric:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref DeviceManagementLogGroup
+      FilterPattern: '[timestamp, level="INFO", message="Heartbeat processado*"]'
+      MetricTransformations:
+        - MetricNamespace: FruitDetection/Devices
+          MetricName: HeartbeatSuccess
+          MetricValue: "1"
+          DefaultValue: 0
+
+  DeviceRegistrationMetric:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref DeviceManagementLogGroup
+      FilterPattern: '[timestamp, level="INFO", message="Dispositivo * registrado com sucesso"]'
+      MetricTransformations:
+        - MetricNamespace: FruitDetection/Devices
+          MetricName: DeviceRegistrations
+          MetricValue: "1"
+          DefaultValue: 0
+
+Outputs:
+  DeviceManagementFunctionArn:
+    Description: ARN da função Lambda Device Management
+    Value: !GetAtt DeviceManagementFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-DeviceManagementFunctionArn
+  
+  ApiGatewayUrl:
+    Description: URL do API Gateway para Device Management
+    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
+    Export:
+      Name: !Sub ${AWS::StackName}-DeviceManagementApiUrl
+  
+  ApiGatewayId:
+    Description: ID do API Gateway
+    Value: !Ref ApiGateway
+    Export:
+      Name: !Sub ${AWS::StackName}-DeviceManagementApiId

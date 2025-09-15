@@ -5,7 +5,7 @@ PYTEST = pytest
 BLACK = black
 RUFF = ruff
 COVERAGE = coverage
-SRC_DIR = lambda-processing-ai lambda-request-handler lambda-results-query
+SRC_DIR = lambda-processing-ai lambda-request-handler lambda-results-query lambda-device-managment
 SHARED_DIR = shared-libs
 PIP = pip
 
