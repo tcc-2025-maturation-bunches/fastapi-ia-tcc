@@ -17,13 +17,22 @@ class RequestSummaryMapper:
         detection_data = combined_result.detection
         detection_result_dict = detection_data.model_dump(exclude_none=True) if detection_data else {}
 
-        known_metadata_keys = {"image_id", "user_id", "location", "processing_type", "notes", "maturation_threshold"}
+        known_metadata_keys = {
+            "image_id",
+            "user_id",
+            "location",
+            "processing_type",
+            "notes",
+            "maturation_threshold",
+            "device_id",
+        }
 
         structured_metadata = {
             "location": initial_metadata.get("location"),
             "processing_type": initial_metadata.get("processing_type"),
             "notes": initial_metadata.get("notes"),
             "maturation_threshold": initial_metadata.get("maturation_threshold"),
+            "device_id": initial_metadata.get("device_id"),
         }
 
         additional_metadata = {
@@ -38,6 +47,7 @@ class RequestSummaryMapper:
             "request_id": request_id,
             "image_id": initial_metadata.get("image_id"),
             "user_id": user_id,
+            "device_id": initial_metadata.get("device_id"),
             "status": combined_result.status,
             "createdAt": now,
             "updatedAt": now,

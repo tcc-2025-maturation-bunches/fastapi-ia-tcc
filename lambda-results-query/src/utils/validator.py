@@ -1,4 +1,5 @@
 import re
+from typing import Optional
 
 from fastapi import HTTPException, status
 
@@ -48,3 +49,23 @@ def validate_image_id(image_id: str) -> str:
         )
 
     return image_id.strip()
+
+
+def validate_device_id(device_id: Optional[str]) -> Optional[str]:
+    if not device_id or len(device_id.strip()) == 0:
+        return None
+
+    device_id = device_id.strip()
+
+    if len(device_id) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="device_id não pode ter mais de 100 caracteres"
+        )
+
+    if not re.match(r"^[a-zA-Z0-9_-]+$", device_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="device_id deve conter apenas caracteres alfanuméricos, hífens e underscores",
+        )
+
+    return device_id

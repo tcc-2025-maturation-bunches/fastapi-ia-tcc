@@ -27,13 +27,13 @@ def lambda_handler(event, context):
         logger.info(f"Tempo restante: {context.get_remaining_time_in_millis()}ms")
 
     try:
-        if event.get("source") == "aws.events" and event.get("detail-type") == "Scheduled Event":
-            return handle_scheduled_event(event, context)
-
         if "Records" in event and event["Records"]:
             for record in event["Records"]:
                 if record.get("EventSource") == "aws:sns":
                     return handle_sns_notification(record, context)
+
+        if event.get("source") == "aws.events" and event.get("detail-type") == "Scheduled Event":
+            return handle_scheduled_event(event, context)
 
         response = handler(event, context)
         logger.info(f"Execução do Lambda bem-sucedida. Status: {response.get('statusCode', 'desconhecido')}")
@@ -104,8 +104,14 @@ def handle_sns_notification(record, context):
         sns_message = json.loads(record["Sns"]["Message"])
         logger.info(f"Processando notificação SNS: {sns_message}")
 
+        event_type = sns_message.get("event_type")
         device_id = sns_message.get("device_id")
+        request_id = sns_message.get("request_id")
         processing_result = sns_message.get("processing_result", {})
+
+        if event_type != "processing_complete":
+            logger.warning(f"Tipo de evento desconhecido: {event_type}, ignorando")
+            return {"statusCode": 200, "body": "Event type not supported"}
 
         if not device_id:
             logger.warning("Notificação SNS sem device_id, ignorando")
@@ -120,7 +126,7 @@ def handle_sns_notification(record, context):
             success = loop.run_until_complete(device_service.update_device_statistics(device_id, processing_result))
 
             if success:
-                logger.info(f"Estatísticas atualizadas para dispositivo {device_id}")
+                logger.info(f"Estatísticas atualizadas para dispositivo {device_id} via SNS")
             else:
                 logger.warning(f"Falha ao atualizar estatísticas para dispositivo {device_id}")
 
@@ -130,7 +136,9 @@ def handle_sns_notification(record, context):
                     {
                         "status": "processed",
                         "device_id": device_id,
+                        "request_id": request_id,
                         "success": success,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
                 ),
             }
