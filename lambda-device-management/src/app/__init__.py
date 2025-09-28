@@ -14,16 +14,8 @@ __description__ = "Lambda para gerenciamento de dispositivos Raspberry Pi via AP
 __author__ = "Device Management Team"
 __service_name__ = "device-management-lambda"
 
-from .main import app
-from .config import settings, get_settings
+from .config import get_settings, settings
 from .lambda_handler import lambda_handler
+from .main import app
 
-__all__ = [
-    "app",
-    "settings",
-    "get_settings",
-    "lambda_handler",
-    "__version__",
-    "__description__",
-    "__service_name__"
-]
+__all__ = ["app", "settings", "get_settings", "lambda_handler", "__version__", "__description__", "__service_name__"]

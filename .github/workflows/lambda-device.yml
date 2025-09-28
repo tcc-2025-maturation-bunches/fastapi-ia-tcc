@@ -179,6 +179,8 @@ jobs:
 
       - name: Teste de funcionamento - Health Check
         run: |
+          echo "Testando endpoints de saúde..."
+          
           echo '{
             "version": "2.0",
             "routeKey": "GET /health",
@@ -188,8 +190,7 @@ jobs:
               "accept": "application/json",
               "content-length": "0",
               "host": "lambda-url.us-east-1.on.aws",
-              "user-agent": "curl/8.0.0",
-              "x-amzn-trace-id": "Root=1-abcdef-0123456789"
+              "user-agent": "github-actions/1.0"
             },
             "requestContext": {
               "accountId": "anonymous",
@@ -201,7 +202,7 @@ jobs:
                 "path": "/health",
                 "protocol": "HTTP/1.1",
                 "sourceIp": "127.0.0.1",
-                "userAgent": "curl/8.0.0"
+                "userAgent": "github-actions/1.0"
               },
               "requestId": "test-request-id-health",
               "routeKey": "GET /health",
@@ -210,13 +211,13 @@ jobs:
               "timeEpoch": 1756000800000
             },
             "isBase64Encoded": false
-          }' > test_payload.json
+          }' > health_test.json
           
           aws lambda invoke \
             --function-name ${{ env.LAMBDA_NAME }}-hom \
-            --payload fileb://test_payload.json \
+            --payload fileb://health_test.json \
             response.json
-          
+
           echo "Resposta da Lambda:"
           cat response.json
 
@@ -292,8 +293,7 @@ jobs:
               "accept": "application/json",
               "content-length": "0",
               "host": "lambda-url.us-east-1.on.aws",
-              "user-agent": "curl/8.0.0",
-              "x-amzn-trace-id": "Root=1-abcdef-0123456789"
+              "user-agent": "github-actions/1.0"
             },
             "requestContext": {
               "accountId": "anonymous",
@@ -305,7 +305,7 @@ jobs:
                 "path": "/health",
                 "protocol": "HTTP/1.1",
                 "sourceIp": "127.0.0.1",
-                "userAgent": "curl/8.0.0"
+                "userAgent": "github-actions/1.0"
               },
               "requestId": "test-request-id-health",
               "routeKey": "GET /health",
@@ -314,11 +314,11 @@ jobs:
               "timeEpoch": 1756000800000
             },
             "isBase64Encoded": false
-          }' > test_payload.json
+          }' > health_payload.json
           
           aws lambda invoke \
             --function-name ${{ env.LAMBDA_NAME }}-prod \
-            --payload fileb://test_payload.json \
+            --payload fileb://health_payload.json \
             response.json
           
           echo "Resposta da Lambda:"
@@ -331,6 +331,37 @@ jobs:
           COLOR="${{ job.status == 'success' && '3066993' || '15158332' }}"
           TITLE="Lambda Device Management - $STATUS"
           
+          DESCRIPTION="Deploy da Lambda Device Management em produção"
+          if [ "${{ job.status }}" == "success" ]; then
+            DESCRIPTION="$DESCRIPTION concluído com sucesso! 🎉\n\n**Funcionalidades:**\n• Gerenciamento de dispositivos Raspberry Pi\n• Monitoramento de heartbeat\n• Estatísticas de captura\n• Detecção automática de dispositivos offline"
+          else
+            DESCRIPTION="$DESCRIPTION falhou! ❌\n\nVerifique os logs do GitHub Actions para detalhes."
+          fi
+          
           curl -H "Content-Type: application/json" \
-            -d "{\"embeds\": [{\"title\": \"$TITLE\", \"color\": $COLOR, \"fields\": [{\"name\": \"Tags\", \"value\": \"environment=${{ env.TAG_ENVIRONMENT }}, project=${{ env.TAG_PROJECT }}, group=${{ env.TAG_GROUP }}, owner=${{ env.TAG_OWNER }}, creator=${{ env.TAG_CREATOR }}\"}]}]}" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"$TITLE\",
+                \"description\": \"$DESCRIPTION\",
+                \"color\": $COLOR,
+                \"fields\": [
+                  {
+                    \"name\": \"Ambiente\",
+                    \"value\": \"Produção\",
+                    \"inline\": true
+                  },
+                  {
+                    \"name\": \"Commit\",
+                    \"value\": \"${{ github.sha }}\",
+                    \"inline\": true
+                  },
+                  {
+                    \"name\": \"Tags\",
+                    \"value\": \"environment=${{ env.TAG_ENVIRONMENT }}, project=${{ env.TAG_PROJECT }}, group=${{ env.TAG_GROUP }}, owner=${{ env.TAG_OWNER }}, creator=${{ env.TAG_CREATOR }}\",
+                    \"inline\": false
+                  }
+                ],
+                \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\"
+              }]
+            }" \
             ${{ secrets.DISCORD_WEBHOOK }}

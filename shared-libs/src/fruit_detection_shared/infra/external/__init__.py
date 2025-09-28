@@ -6,6 +6,7 @@ Clientes para serviços externos AWS
 from .dynamo import DynamoClient
 from .ec2 import EC2Client
 from .s3 import S3Client
+from .sns import SNSClient
 from .sqs import SQSClient
 
 __all__ = [
@@ -13,4 +14,5 @@ __all__ = [
     "EC2Client",
     "S3Client",
     "SQSClient",
+    "SNSClient",
 ]

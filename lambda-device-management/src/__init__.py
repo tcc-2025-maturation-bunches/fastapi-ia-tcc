@@ -13,11 +13,6 @@ Estrutura:
 __version__ = "1.0.0"
 __package_name__ = "device-management-lambda-src"
 
-from .app import app, settings, lambda_handler
+from .app import app, lambda_handler, settings
 
-__all__ = [
-    "app",
-    "settings",
-    "lambda_handler",
-    "__version__"
-]
+__all__ = ["app", "settings", "lambda_handler", "__version__"]

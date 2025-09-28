@@ -3,11 +3,12 @@ Infrastructure Layer - Fruit Detection Shared
 Camada de infraestrutura com clientes externos
 """
 
-from .external import DynamoClient, EC2Client, S3Client, SQSClient
+from .external import DynamoClient, EC2Client, S3Client, SNSClient, SQSClient
 
 __all__ = [
     "DynamoClient",
     "EC2Client",
     "S3Client",
     "SQSClient",
+    "SNSClient",
 ]
