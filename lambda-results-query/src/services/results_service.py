@@ -37,12 +37,21 @@ class ResultsService:
             logger.exception(f"Erro ao recuperar resultados por user_id: {e}")
             raise
 
+    async def get_by_device_id(self, device_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        try:
+            logger.info(f"Recuperando resultados para device_id: {device_id}")
+            return await self.dynamo_repository.get_results_by_device_id(device_id, limit)
+        except Exception as e:
+            logger.exception(f"Erro ao recuperar resultados por device_id: {e}")
+            raise
+
     async def get_all_results(
         self,
         limit: int = 20,
         last_evaluated_key: Optional[Dict[str, Any]] = None,
         status_filter: Optional[str] = None,
         user_id: Optional[str] = None,
+        device_id: Optional[str] = None,
         exclude_errors: bool = False,
     ) -> Dict[str, Any]:
         try:
@@ -53,6 +62,7 @@ class ResultsService:
                 last_evaluated_key=last_evaluated_key,
                 status_filter=status_filter,
                 user_id=user_id,
+                device_id=device_id,
                 exclude_errors=exclude_errors,
             )
 
@@ -74,6 +84,7 @@ class ResultsService:
                 "filters_applied": {
                     "status_filter": status_filter,
                     "user_id": user_id,
+                    "device_id": device_id,
                     "exclude_errors": exclude_errors,
                 },
             }
@@ -82,13 +93,20 @@ class ResultsService:
             logger.exception(f"Erro ao recuperar todos os resultados: {e}")
             raise
 
-    async def get_results_summary(self, days: int = 7) -> Dict[str, Any]:
+    async def get_results_summary(self, days: int = 7, device_id: Optional[str] = None) -> Dict[str, Any]:
         try:
             logger.info(f"Gerando resumo dos resultados dos últimos {days} dias")
+            if device_id:
+                logger.info(f"Filtrado por device_id: {device_id}")
 
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
 
-            response = await self.dynamo_repository.get_results_with_filters(start_date=cutoff_date, limit=1000)
+            if device_id:
+                response = await self.dynamo_repository.get_results_with_filters(
+                    start_date=cutoff_date, limit=1000, device_id=device_id
+                )
+            else:
+                response = await self.dynamo_repository.get_results_with_filters(start_date=cutoff_date, limit=1000)
 
             items = response.get("items", [])
 
@@ -129,6 +147,7 @@ class ResultsService:
 
             summary = {
                 "period_days": days,
+                "device_id": device_id,
                 "total_results": total_results,
                 "successful_results": successful_results,
                 "failed_results": failed_results,

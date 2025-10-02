@@ -1,25 +1,25 @@
-name: Pipeline CI/CD - Lambda Processing AI
+name: Pipeline CI/CD - Lambda Device Management
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'lambda-processing-ai/**'
+      - 'lambda-device-management/**'
       - 'shared-libs/**'
-      - '.github/workflows/lambda-processing.yaml'
+      - '.github/workflows/lambda-device.yaml'
   pull_request:
     branches:
       - main
     types: [opened, synchronize, reopened]
     paths:
-      - 'lambda-processing-ai/**'
+      - 'lambda-device-management/**'
       - 'shared-libs/**'
-      - '.github/workflows/lambda-processing.yaml'
+      - '.github/workflows/lambda-device.yaml'
 
 env:
   AWS_REGION: us-east-1
-  LAMBDA_NAME: fruit-detection-processing-ai
+  LAMBDA_NAME: fruit-detection-device-management
   PYTHON_VERSION: '3.13'
   TAG_ENVIRONMENT: graduacao
   TAG_PROJECT: tcc
@@ -35,7 +35,7 @@ jobs:
   test:
     name: Testes e Verificação de Qualidade
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
@@ -53,20 +53,20 @@ jobs:
           cd ..
 
       - name: Instalar dependências da Lambda
-        working-directory: lambda-processing-ai
+        working-directory: lambda-device-management
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest black ruff || echo "Dev dependencies não encontradas"
+          pip install -r requirements-dev.txt || echo "No dev requirements"
 
       - name: Verificar formatação com Black e Ruff
-        working-directory: lambda-processing-ai
+        working-directory: lambda-device-management
         run: |
           black --check src/
           ruff check src/
 
       - name: Executar testes
-        working-directory: lambda-processing-ai
+        working-directory: lambda-device-management
         run: |
           python -m pytest tests/ -v || echo "Testes não encontrados"
 
@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/'))
-    
+
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
@@ -86,29 +86,33 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Criar pacote de implantação
-        working-directory: lambda-processing-ai
+        working-directory: lambda-device-management
         run: |
           mkdir -p deployment/src
           
+          # Copiar código fonte
           cp -r src/* deployment/src/
           
+          # Instalar dependências no diretório de deployment
           pip install -r requirements.txt -t deployment/
           
+          # Instalar shared-libs no diretório de deployment
           cd ../shared-libs
-          pip install . -t ../lambda-processing-ai/deployment/
-          cd ../lambda-processing-ai
+          pip install . -t ../lambda-device-management/deployment/
+          cd ../lambda-device-management
           
+          # Criar arquivo zip
           cd deployment
-          zip -r ../lambda-processing-ai.zip .
+          zip -r ../lambda-device-management.zip .
           cd ..
           
-          echo "Package size: $(du -h lambda-processing-ai.zip | cut -f1)"
+          echo "Package size: $(du -h lambda-device-management.zip | cut -f1)"
 
       - name: Upload artefato
         uses: actions/upload-artifact@v4
         with:
           name: lambda-package
-          path: lambda-processing-ai/lambda-processing-ai.zip
+          path: lambda-device-management/lambda-device-management.zip
           retention-days: 7
 
   deploy-hom:
@@ -117,11 +121,11 @@ jobs:
     needs: build
     if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/')
     environment: homologation
-    
+
     permissions:
       id-token: write
       contents: read
-    
+
     steps:
       - name: Ensure AWS CLI v2
         run: |
@@ -139,14 +143,14 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_KEY }}
-          role-session-name: github-actions-lambda-processing-hom
+          role-session-name: github-actions-lambda-device-hom
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Implantar no Lambda
         run: |
           aws lambda update-function-code \
             --function-name ${{ env.LAMBDA_NAME }}-hom \
-            --zip-file fileb://lambda-processing-ai.zip \
+            --zip-file fileb://lambda-device-management.zip \
             --publish
 
       - name: Aplicar tags na função Lambda
@@ -175,6 +179,8 @@ jobs:
 
       - name: Teste de funcionamento - Health Check
         run: |
+          echo "Testando endpoints de saúde..."
+          
           echo '{
             "version": "2.0",
             "routeKey": "GET /health",
@@ -184,8 +190,7 @@ jobs:
               "accept": "application/json",
               "content-length": "0",
               "host": "lambda-url.us-east-1.on.aws",
-              "user-agent": "curl/8.0.0",
-              "x-amzn-trace-id": "Root=1-abcdef-0123456789"
+              "user-agent": "github-actions/1.0"
             },
             "requestContext": {
               "accountId": "anonymous",
@@ -197,7 +202,7 @@ jobs:
                 "path": "/health",
                 "protocol": "HTTP/1.1",
                 "sourceIp": "127.0.0.1",
-                "userAgent": "curl/8.0.0"
+                "userAgent": "github-actions/1.0"
               },
               "requestId": "test-request-id-health",
               "routeKey": "GET /health",
@@ -206,13 +211,13 @@ jobs:
               "timeEpoch": 1756000800000
             },
             "isBase64Encoded": false
-          }' > test_payload.json
+          }' > health_test.json
           
           aws lambda invoke \
             --function-name ${{ env.LAMBDA_NAME }}-hom \
-            --payload fileb://test_payload.json \
+            --payload fileb://health_test.json \
             response.json
-          
+
           echo "Resposta da Lambda:"
           cat response.json
 
@@ -222,11 +227,11 @@ jobs:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: production
-    
+
     permissions:
       id-token: write
       contents: read
-    
+
     steps:
       - name: Ensure AWS CLI v2
         run: |
@@ -244,14 +249,14 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_KEY }}
-          role-session-name: github-actions-lambda-processing-prod
+          role-session-name: github-actions-lambda-device-prod
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Implantar no Lambda
         run: |
           aws lambda update-function-code \
             --function-name ${{ env.LAMBDA_NAME }}-prod \
-            --zip-file fileb://lambda-processing-ai.zip
+            --zip-file fileb://lambda-device-management.zip
 
       - name: Aplicar tags na função Lambda
         run: |
@@ -288,8 +293,7 @@ jobs:
               "accept": "application/json",
               "content-length": "0",
               "host": "lambda-url.us-east-1.on.aws",
-              "user-agent": "curl/8.0.0",
-              "x-amzn-trace-id": "Root=1-abcdef-0123456789"
+              "user-agent": "github-actions/1.0"
             },
             "requestContext": {
               "accountId": "anonymous",
@@ -301,7 +305,7 @@ jobs:
                 "path": "/health",
                 "protocol": "HTTP/1.1",
                 "sourceIp": "127.0.0.1",
-                "userAgent": "curl/8.0.0"
+                "userAgent": "github-actions/1.0"
               },
               "requestId": "test-request-id-health",
               "routeKey": "GET /health",
@@ -310,11 +314,11 @@ jobs:
               "timeEpoch": 1756000800000
             },
             "isBase64Encoded": false
-          }' > test_payload.json
+          }' > health_payload.json
           
           aws lambda invoke \
             --function-name ${{ env.LAMBDA_NAME }}-prod \
-            --payload fileb://test_payload.json \
+            --payload fileb://health_payload.json \
             response.json
           
           echo "Resposta da Lambda:"
@@ -325,8 +329,39 @@ jobs:
         run: |
           STATUS="${{ job.status == 'success' && '✅ Sucesso' || '❌ Falhou' }}"
           COLOR="${{ job.status == 'success' && '3066993' || '15158332' }}"
-          TITLE="Lambda Processing AI - $STATUS"
+          TITLE="Lambda Device Management - $STATUS"
+          
+          DESCRIPTION="Deploy da Lambda Device Management em produção"
+          if [ "${{ job.status }}" == "success" ]; then
+            DESCRIPTION="$DESCRIPTION concluído com sucesso! 🎉\n\n**Funcionalidades:**\n• Gerenciamento de dispositivos Raspberry Pi\n• Monitoramento de heartbeat\n• Estatísticas de captura\n• Detecção automática de dispositivos offline"
+          else
+            DESCRIPTION="$DESCRIPTION falhou! ❌\n\nVerifique os logs do GitHub Actions para detalhes."
+          fi
           
           curl -H "Content-Type: application/json" \
-            -d "{\"embeds\": [{\"title\": \"$TITLE\", \"color\": $COLOR, \"fields\": [{\"name\": \"Tags\", \"value\": \"environment=${{ env.TAG_ENVIRONMENT }}, project=${{ env.TAG_PROJECT }}, group=${{ env.TAG_GROUP }}, owner=${{ env.TAG_OWNER }}, creator=${{ env.TAG_CREATOR }}\"}]}]}" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"$TITLE\",
+                \"description\": \"$DESCRIPTION\",
+                \"color\": $COLOR,
+                \"fields\": [
+                  {
+                    \"name\": \"Ambiente\",
+                    \"value\": \"Produção\",
+                    \"inline\": true
+                  },
+                  {
+                    \"name\": \"Commit\",
+                    \"value\": \"${{ github.sha }}\",
+                    \"inline\": true
+                  },
+                  {
+                    \"name\": \"Tags\",
+                    \"value\": \"environment=${{ env.TAG_ENVIRONMENT }}, project=${{ env.TAG_PROJECT }}, group=${{ env.TAG_GROUP }}, owner=${{ env.TAG_OWNER }}, creator=${{ env.TAG_CREATOR }}\",
+                    \"inline\": false
+                  }
+                ],
+                \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\"
+              }]
+            }" \
             ${{ secrets.DISCORD_WEBHOOK }}
