@@ -22,8 +22,8 @@ env:
   LAMBDA_NAME: fruit-detection-results-query
   PYTHON_VERSION: '3.13'
   TAG_ENVIRONMENT: graduacao
-  TAG_PROJECT: TCC
-  TAG_GROUP: CICD15
+  TAG_PROJECT: tcc
+  TAG_GROUP: cicd15
   TAG_OWNER: bossini
   TAG_CREATOR: 22.01019-0
 

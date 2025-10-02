@@ -3,34 +3,58 @@ Fruit Detection Shared Library
 Biblioteca compartilhada para o sistema de detecção e maturação de frutas
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .domain.entities import CombinedResult, Device, Image
 from .domain.models import (
     CombinedContractResponse,
-    CombinedProcessingRequest,
     ContractDetection,
     ContractDetectionResult,
     ContractDetectionSummary,
     ProcessingMetadata,
 )
-from .infra.external import DynamoClient, EC2Client, S3Client, SQSClient
+from .domain.models.request_models import (
+    BatchProcessingRequest,
+    BatchProcessingResponse,
+    CombinedProcessingRequest,
+    ProcessingResponse,
+    ProcessingStatusResponse,
+    QueueStatsResponse,
+    validate_image_metadata_shared,
+)
+from .domain.models.request_models import (
+    ProcessingMetadata as SharedProcessingMetadata,
+)
+from .infra.external import DynamoClient, EC2Client, S3Client, SNSClient, SQSClient
 from .mappers import ContractResponseMapper, RequestSummaryMapper
 
 __all__ = [
+    # Entities
     "CombinedResult",
     "Device",
     "Image",
+    # Contract Models (usados internamente entre serviços)
     "CombinedContractResponse",
-    "CombinedProcessingRequest",
     "ContractDetection",
     "ContractDetectionResult",
     "ContractDetectionSummary",
     "ProcessingMetadata",
+    # Request/Response Models (usados por APIs públicas)
+    "SharedProcessingMetadata",
+    "CombinedProcessingRequest",
+    "ProcessingResponse",
+    "ProcessingStatusResponse",
+    "BatchProcessingRequest",
+    "BatchProcessingResponse",
+    "QueueStatsResponse",
+    "validate_image_metadata_shared",
+    # Infrastructure Clients
     "DynamoClient",
     "EC2Client",
     "S3Client",
     "SQSClient",
+    "SNSClient",
+    # Mappers
     "ContractResponseMapper",
     "RequestSummaryMapper",
 ]

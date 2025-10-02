@@ -64,12 +64,29 @@ class DynamoRepository:
             logger.exception(f"Erro ao buscar resultados por user_id: {e}")
             raise
 
+    async def get_results_by_device_id(self, device_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        try:
+            items = await self.dynamo_client.scan(
+                filter_expression="entity_type = :entity_type AND initial_metadata.device_id = :device_id",
+                expression_values={":entity_type": "COMBINED_RESULT", ":device_id": device_id},
+                limit=limit,
+            )
+
+            results = [self._format_result_item(item) for item in items]
+            logger.info(f"Encontrados {len(results)} resultados para device_id: {device_id}")
+            return results
+
+        except Exception as e:
+            logger.exception(f"Erro ao buscar resultados por device_id: {e}")
+            raise
+
     async def get_all_results(
         self,
         limit: int = 20,
         last_evaluated_key: Optional[Dict[str, Any]] = None,
         status_filter: Optional[str] = None,
         user_id: Optional[str] = None,
+        device_id: Optional[str] = None,
         exclude_errors: bool = False,
     ) -> Dict[str, Any]:
         try:
@@ -109,6 +126,16 @@ class DynamoRepository:
                 if status_filter and item_status != status_filter:
                     continue
 
+                if device_id:
+                    item_device_id = None
+                    initial_metadata = item.get("initial_metadata", {})
+                    additional_metadata = item.get("additional_metadata", {})
+
+                    item_device_id = initial_metadata.get("device_id") or additional_metadata.get("device_id")
+
+                    if item_device_id != device_id:
+                        continue
+
                 filtered_items.append(self._format_result_item(item))
 
                 if len(filtered_items) >= limit:
@@ -125,6 +152,7 @@ class DynamoRepository:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         status_filter: Optional[str] = None,
+        device_id: Optional[str] = None,
         limit: int = 1000,
     ) -> Dict[str, Any]:
         try:
@@ -136,12 +164,16 @@ class DynamoRepository:
                 expression_values[":status"] = status_filter
 
             if start_date:
-                filter_expressions.append("created_at >= :start_date")
+                filter_expressions.append("createdAt >= :start_date")
                 expression_values[":start_date"] = start_date.isoformat()
 
             if end_date:
-                filter_expressions.append("created_at <= :end_date")
+                filter_expressions.append("createdAt <= :end_date")
                 expression_values[":end_date"] = end_date.isoformat()
+
+            if device_id:
+                filter_expressions.append("initial_metadata.device_id = :device_id")
+                expression_values[":device_id"] = device_id
 
             expression_names = {}
             if status_filter:
@@ -163,10 +195,16 @@ class DynamoRepository:
             raise
 
     def _format_result_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        initial_metadata = item.get("initial_metadata", {})
+        additional_metadata = item.get("additional_metadata", {})
+
+        device_id = initial_metadata.get("device_id") or additional_metadata.get("device_id")
+
         return {
             "request_id": item.get("request_id"),
             "image_id": item.get("image_id"),
             "user_id": item.get("user_id"),
+            "device_id": device_id,
             "status": item.get("status"),
             "created_at": item.get("createdAt"),
             "updated_at": item.get("updatedAt"),

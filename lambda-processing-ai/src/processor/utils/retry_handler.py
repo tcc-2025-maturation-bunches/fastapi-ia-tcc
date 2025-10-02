@@ -3,7 +3,7 @@ import logging
 from functools import wraps
 from typing import Any, Callable, Optional
 
-from app.config import settings
+from src.app.config import settings
 
 logger = logging.getLogger(__name__)
 

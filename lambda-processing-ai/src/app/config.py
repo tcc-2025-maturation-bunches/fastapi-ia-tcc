@@ -22,6 +22,11 @@ class Settings:
         self.EC2_IA_ENDPOINT = os.getenv("EC2_IA_ENDPOINT", "http://localhost:8001")
         self.REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "300"))
 
+        self.SNS_DEVICE_MANAGEMENT_TOPIC = os.getenv(
+            "SNS_DEVICE_MANAGEMENT_TOPIC",
+            f"arn:aws:sns:{self.AWS_REGION}:account-id:device-management-notifications-{self.ENVIRONMENT}",
+        )
+
         self.MIN_DETECTION_CONFIDENCE = float(os.getenv("MIN_DETECTION_CONFIDENCE", "0.6"))
         self.MIN_MATURATION_CONFIDENCE = float(os.getenv("MIN_MATURATION_CONFIDENCE", "0.7"))
 
