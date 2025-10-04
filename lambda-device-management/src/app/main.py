@@ -81,19 +81,45 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+DEVICE_SPECIAL_ENDPOINTS = ["all", "register", "global-config", "stats"]
+
+
 @app.middleware("http")
 async def validate_device_path_params(request: Request, call_next):
-    if "/devices/" in str(request.url.path):
-        path_parts = str(request.url.path).split("/")
-        if "devices" in path_parts:
+    path = str(request.url.path)
+
+    if "/devices/" in path:
+        path_parts = path.split("/")
+
+        try:
             device_index = path_parts.index("devices")
-            if device_index + 1 < len(path_parts):
-                device_id = path_parts[device_index + 1]
-                if device_id not in ["all", "register", "global-config", "stats"]:
-                    try:
-                        validate_device_id(device_id)
-                    except HTTPException as e:
-                        return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
+        except ValueError:
+            logger.error(f"Erro na estrutura do path - segmento 'devices' não encontrado em: {path}")
+            return JSONResponse(
+                status_code=400, content={"detail": "Estrutura de path inválida: segmento 'devices' não encontrado."}
+            )
+
+        if device_index + 1 < len(path_parts):
+            device_id_segment = path_parts[device_index + 1]
+
+            if not device_id_segment:
+                logger.warning(f"Segmento device_id vazio no path: {path}")
+                return JSONResponse(
+                    status_code=400, content={"detail": "Segmento de ID do dispositivo está vazio no path."}
+                )
+
+            if device_id_segment in DEVICE_SPECIAL_ENDPOINTS:
+                response = await call_next(request)
+                return response
+
+            try:
+                validate_device_id(device_id_segment)
+            except HTTPException as e:
+                logger.warning(f"Validação do ID do dispositivo falhou: '{device_id_segment}' - {e.detail}")
+                return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
+        else:
+            logger.warning(f"ID do dispositivo ausente no path: {path}")
+            return JSONResponse(status_code=400, content={"detail": "ID do dispositivo está ausente no path."})
 
     response = await call_next(request)
     return response
