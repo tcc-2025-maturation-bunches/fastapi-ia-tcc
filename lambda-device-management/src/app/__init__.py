@@ -9,7 +9,7 @@ Este módulo fornece a estrutura principal para:
 - Configuração e estatísticas de dispositivos
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __description__ = "Lambda para gerenciamento de dispositivos Raspberry Pi via API Gateway"
 __author__ = "Device Management Team"
 __service_name__ = "device-management-lambda"
