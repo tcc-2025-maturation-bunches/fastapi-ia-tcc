@@ -74,63 +74,6 @@ async def register_device(request: DeviceRegistrationRequest):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao registrar dispositivo")
 
 
-@device_router.post(
-    "/{device_id}/heartbeat",
-    response_model=HeartbeatResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Enviar heartbeat do dispositivo",
-)
-async def send_heartbeat(device_id: str, request: HeartbeatRequest):
-    try:
-        validate_device_id(device_id)
-        logger.info(f"Heartbeat recebido do dispositivo: {device_id}")
-
-        device_service = DeviceService()
-        result = await device_service.process_heartbeat(device_id, request.status, request.additional_data)
-
-        if not result:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Dispositivo {device_id} não encontrado")
-
-        return HeartbeatResponse(
-            device_id=device_id,
-            status=result["status"],
-            last_seen=datetime.fromisoformat(result["last_seen"]),
-            commands=result.get("commands", []),
-            config_updates=result.get("config_updates"),
-            message="Heartbeat processado com sucesso",
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"Erro ao processar heartbeat: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao processar heartbeat")
-
-
-@device_router.get(
-    "/{device_id}",
-    response_model=DeviceResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Obter detalhes do dispositivo",
-)
-async def get_device(device_id: str):
-    try:
-        validate_device_id(device_id)
-        device_service = DeviceService()
-        device = await device_service.get_device_by_id(device_id)
-
-        if not device:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Dispositivo {device_id} não encontrado")
-
-        return DeviceResponse(**device.to_dict())
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"Erro ao obter dispositivo: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao recuperar dispositivo")
-
-
 @device_router.get(
     "/all",
     response_model=List[DeviceResponse],
@@ -153,31 +96,6 @@ async def list_devices(
     except Exception as e:
         logger.exception(f"Erro ao listar dispositivos: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao listar dispositivos")
-
-
-@device_router.put(
-    "/{device_id}/config",
-    response_model=Dict[str, Any],
-    status_code=status.HTTP_200_OK,
-    summary="Atualizar configuração do dispositivo",
-)
-async def update_device_config(device_id: str, config_update: DeviceConfigUpdate):
-    try:
-        validate_device_id(device_id)
-        device_service = DeviceService()
-
-        result = await device_service.update_device_config(device_id, config_update.model_dump(exclude_none=True))
-
-        if not result:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Dispositivo {device_id} não encontrado")
-
-        return {"message": "Configuração atualizada com sucesso", "device_id": device_id, "updated_config": result}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"Erro ao atualizar configuração: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao atualizar configuração")
 
 
 @device_router.get(
@@ -223,6 +141,64 @@ async def update_global_config(config: GlobalConfigRequest):
 
 
 @device_router.post(
+    "/{device_id}/heartbeat",
+    response_model=HeartbeatResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Enviar heartbeat do dispositivo",
+)
+async def send_heartbeat(device_id: str, request: HeartbeatRequest):
+    try:
+        validate_device_id(device_id)
+        logger.info(f"Heartbeat recebido do dispositivo: {device_id}")
+
+        device_service = DeviceService()
+        result = await device_service.process_heartbeat(device_id, request.status, request.additional_data)
+
+        if not result:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Dispositivo {device_id} não encontrado")
+
+        return HeartbeatResponse(
+            device_id=device_id,
+            status=result["status"],
+            last_seen=datetime.fromisoformat(result["last_seen"]),
+            commands=result.get("commands", []),
+            config_updates=result.get("config_updates"),
+            message="Heartbeat processado com sucesso",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Erro ao processar heartbeat: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao processar heartbeat")
+
+
+@device_router.put(
+    "/{device_id}/config",
+    response_model=Dict[str, Any],
+    status_code=status.HTTP_200_OK,
+    summary="Atualizar configuração do dispositivo",
+)
+async def update_device_config(device_id: str, config_update: DeviceConfigUpdate):
+    try:
+        validate_device_id(device_id)
+        device_service = DeviceService()
+
+        result = await device_service.update_device_config(device_id, config_update.model_dump(exclude_none=True))
+
+        if not result:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Dispositivo {device_id} não encontrado")
+
+        return {"message": "Configuração atualizada com sucesso", "device_id": device_id, "updated_config": result}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Erro ao atualizar configuração: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao atualizar configuração")
+
+
+@device_router.post(
     "/{device_id}/processing-notification",
     response_model=Dict[str, Any],
     status_code=status.HTTP_200_OK,
@@ -242,3 +218,27 @@ async def notify_processing_complete(device_id: str, notification: Dict[str, Any
     except Exception as e:
         logger.exception(f"Erro ao processar notificação: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao processar notificação")
+
+
+@device_router.get(
+    "/{device_id}",
+    response_model=DeviceResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Obter detalhes do dispositivo",
+)
+async def get_device(device_id: str):
+    try:
+        validate_device_id(device_id)
+        device_service = DeviceService()
+        device = await device_service.get_device_by_id(device_id)
+
+        if not device:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Dispositivo {device_id} não encontrado")
+
+        return DeviceResponse(**device.to_dict())
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Erro ao obter dispositivo: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao recuperar dispositivo")
