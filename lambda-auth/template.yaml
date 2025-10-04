@@ -1,0 +1,68 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Lambda Auth para Sistema de Detecção de Frutas
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - hom
+      - prod
+    Description: Ambiente de implantação
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: python3.13
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        LOG_LEVEL: INFO
+        AWS_REGION: !Ref AWS::Region
+        JWT_SECRET_KEY: change
+        ACCESS_TOKEN_EXPIRE_MINUTES: 30
+
+Resources:
+  AuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub fruit-detection-${Environment}-auth
+      CodeUri: .
+      Handler: src.app.lambda_handler.lambda_handler
+      Runtime: python3.13
+      MemorySize: 512
+      Timeout: 30
+      Events:
+        ApiGatewayProxy:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            RestApiId: !Ref ApiGateway
+        ApiGatewayRoot:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+            RestApiId: !Ref ApiGateway
+
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub fruit-detection-${Environment}-auth-api
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
+
+Outputs:
+  AuthFunctionArn:
+    Description: ARN da função Lambda
+    Value: !GetAtt AuthFunction.Arn
+  ApiGatewayUrl:
+    Description: URL do API Gateway
+    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
