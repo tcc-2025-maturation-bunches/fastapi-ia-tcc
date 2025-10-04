@@ -81,19 +81,46 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+DEVICE_SPECIAL_ENDPOINTS = ["all", "register", "global-config", "stats"]
+VALID_DEVICE_ACTIONS = ["heartbeat", "config", "processing-notification"]
+
 @app.middleware("http")
 async def validate_device_path_params(request: Request, call_next):
-    if "/devices/" in str(request.url.path):
-        path_parts = str(request.url.path).split("/")
-        if "devices" in path_parts:
+    path = str(request.url.path)
+
+    if "/devices/" in path:
+        path_parts = path.split("/")
+
+        try:
             device_index = path_parts.index("devices")
+
             if device_index + 1 < len(path_parts):
-                device_id = path_parts[device_index + 1]
-                if device_id not in ["all", "register", "global-config", "stats"]:
+                device_id_segment = path_parts[device_index + 1]
+
+                if not device_id_segment:
+                    return JSONResponse(status_code=400, content={"detail": "Device ID is missing or invalid in path."})
+                if device_id_segment in DEVICE_SPECIAL_ENDPOINTS:
+                    response = await call_next(request)
+                    return response
+
+                if device_index + 2 < len(path_parts):
+                    action = path_parts[device_index + 2]
+                    if action in VALID_DEVICE_ACTIONS:
+                        try:
+                            validate_device_id(device_id_segment)
+                        except HTTPException as e:
+                            logger.warning(f"Validation failed for device_id: {device_id_segment}")
+                            return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
+                else:
                     try:
-                        validate_device_id(device_id)
+                        validate_device_id(device_id_segment)
                     except HTTPException as e:
+                        logger.warning(f"Validation failed for device_id: {device_id_segment}")
                         return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
+
+        except (ValueError, IndexError) as e:
+            logger.warning(f"Malformed device path: {path} - {e}")
+            return JSONResponse(status_code=400, content={"detail": "Malformed device path or missing device ID."})
 
     response = await call_next(request)
     return response
