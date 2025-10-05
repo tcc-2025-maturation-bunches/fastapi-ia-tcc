@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ImageMetadata(BaseModel):
@@ -46,10 +46,9 @@ class ColorAnalysis(BaseModel):
     brown_ratio: float
 
 
-# Removed duplicate definition of MaturationInfo
-
-
 class ModelVersions(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     detection: str = "unknown"
     maturation: str = "unknown"
 
@@ -64,6 +63,8 @@ class ModelVersions(BaseModel):
 
 
 class ContractDetectionSummary(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     total_objects: int
     objects_with_maturation: int
     detection_time_ms: int

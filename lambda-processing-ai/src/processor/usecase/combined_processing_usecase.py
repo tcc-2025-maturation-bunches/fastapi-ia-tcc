@@ -158,7 +158,7 @@ class CombinedProcessingUseCase:
         error_code: Optional[str] = None,
     ):
         try:
-            status_data = {"status": status, "progress": progress, "updatedAt": datetime.now(timezone.utc).isoformat()}
+            status_data = {"status": status, "progress": progress, "updated_at": datetime.now(timezone.utc).isoformat()}
 
             if error:
                 status_data["error"] = error

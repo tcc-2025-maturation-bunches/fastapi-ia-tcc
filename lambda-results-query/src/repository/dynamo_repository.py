@@ -164,11 +164,11 @@ class DynamoRepository:
                 expression_values[":status"] = status_filter
 
             if start_date:
-                filter_expressions.append("createdAt >= :start_date")
+                filter_expressions.append("created_at >= :start_date")
                 expression_values[":start_date"] = start_date.isoformat()
 
             if end_date:
-                filter_expressions.append("createdAt <= :end_date")
+                filter_expressions.append("created_at <= :end_date")
                 expression_values[":end_date"] = end_date.isoformat()
 
             if device_id:
@@ -206,8 +206,8 @@ class DynamoRepository:
             "user_id": item.get("user_id"),
             "device_id": device_id,
             "status": item.get("status"),
-            "created_at": item.get("createdAt"),
-            "updated_at": item.get("updatedAt"),
+            "created_at": item.get("created_at"),
+            "updated_at": item.get("updated_at"),
             "processing_time_ms": item.get("processing_time_ms"),
             "image_url": item.get("image_url"),
             "image_result_url": item.get("image_result_url"),
