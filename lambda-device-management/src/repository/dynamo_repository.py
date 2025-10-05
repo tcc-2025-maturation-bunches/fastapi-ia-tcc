@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fruit_detection_shared.domain.entities import Device
@@ -179,7 +179,7 @@ class DynamoRepository:
             update_expression = "SET #status = :status, updatedAt = :updated_at"
             expression_values = {
                 ":status": status,
-                ":updated_at": datetime.now().isoformat(),
+                ":updated_at": datetime.now(timezone.utc).isoformat(),
             }
             expression_names = {"#status": "status"}
 
@@ -204,7 +204,7 @@ class DynamoRepository:
             update_expression = "SET config = :config, updatedAt = :updated_at"
             expression_values = {
                 ":config": config,
-                ":updated_at": datetime.now().isoformat(),
+                ":updated_at": datetime.now(timezone.utc).isoformat(),
             }
 
             await self.dynamo_client.update_item(
@@ -227,7 +227,7 @@ class DynamoRepository:
             update_expression = "SET stats = :stats, updatedAt = :updated_at"
             expression_values = {
                 ":stats": stats,
-                ":updated_at": datetime.now().isoformat(),
+                ":updated_at": datetime.now(timezone.utc).isoformat(),
             }
 
             await self.dynamo_client.update_item(

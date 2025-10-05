@@ -20,13 +20,14 @@ class DeviceService:
 
             if existing_device:
                 logger.info(f"Dispositivo {request.device_id} já existe, atualizando heartbeat")
+                previous_status = existing_device.status
                 existing_device.update_heartbeat(status=request.status)
                 await self.dynamo_repository.save_device(existing_device)
 
                 await self._log_device_event(
                     existing_device,
                     "device_reconnected",
-                    {"previous_status": existing_device.status, "new_status": request.status},
+                    {"previous_status": previous_status, "new_status": request.status},
                 )
 
                 return {
