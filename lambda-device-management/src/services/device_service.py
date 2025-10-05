@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fruit_detection_shared.domain.entities import Device
@@ -20,15 +21,8 @@ class DeviceService:
 
             if existing_device:
                 logger.info(f"Dispositivo {request.device_id} já existe, atualizando heartbeat")
-                previous_status = existing_device.status
                 existing_device.update_heartbeat(status=request.status)
                 await self.dynamo_repository.save_device(existing_device)
-
-                await self._log_device_event(
-                    existing_device,
-                    "device_reconnected",
-                    {"previous_status": previous_status, "new_status": request.status},
-                )
 
                 return {
                     "device_id": existing_device.device_id,
@@ -48,10 +42,6 @@ class DeviceService:
             )
 
             await self.dynamo_repository.save_device(device)
-
-            await self._log_device_event(
-                device, "device_registered", {"location": device.location, "capabilities": device.capabilities}
-            )
 
             logger.info(f"Dispositivo {request.device_id} registrado com sucesso")
 
@@ -77,12 +67,8 @@ class DeviceService:
                 logger.warning(f"Dispositivo {device_id} não encontrado para heartbeat")
                 return None
 
-            previous_status = device.status
             device.update_heartbeat(status=status, additional_data=additional_data)
             await self.dynamo_repository.save_device(device)
-
-            if previous_status != status:
-                await self._log_device_event(device, "status_changed", {"from": previous_status, "to": status})
 
             logger.debug(f"Heartbeat processado para dispositivo {device_id}")
 
@@ -130,15 +116,8 @@ class DeviceService:
                 logger.warning(f"Dispositivo {device_id} não encontrado para atualização de config")
                 return None
 
-            old_config = device.config.copy()
             device.update_config(config_updates)
             await self.dynamo_repository.save_device(device)
-
-            await self._log_device_event(
-                device,
-                "config_updated",
-                {"old_config": old_config, "new_config": device.config, "changes": config_updates},
-            )
 
             logger.info(f"Configuração atualizada para dispositivo {device_id}")
 
@@ -168,8 +147,6 @@ class DeviceService:
                 device.stats["average_processing_time_ms"] = int(new_avg)
 
             await self.dynamo_repository.save_device(device)
-
-            await self.dynamo_repository.save_device_stats(device)
 
             logger.info(f"Estatísticas atualizadas para dispositivo {device_id}")
             return True
@@ -219,47 +196,6 @@ class DeviceService:
             logger.exception(f"Erro ao obter estatísticas dos dispositivos: {e}")
             raise
 
-    async def get_device_stats_history(self, device_id: str, days: int = 7) -> List[Dict[str, Any]]:
-        try:
-            stats_history = await self.dynamo_repository.get_device_stats_history(device_id, days)
-
-            return [
-                {
-                    "date": item.get("date"),
-                    "total_captures": item.get("total_captures", 0),
-                    "successful_captures": item.get("successful_captures", 0),
-                    "failed_captures": item.get("failed_captures", 0),
-                    "success_rate": (
-                        0
-                        if item.get("total_captures", 0) == 0
-                        else (item.get("successful_captures", 0) / item.get("total_captures", 0) * 100)
-                    ),
-                    "average_processing_time_ms": item.get("average_processing_time_ms", 0),
-                }
-                for item in stats_history
-            ]
-
-        except Exception as e:
-            logger.exception(f"Erro ao obter histórico de estatísticas: {e}")
-            raise
-
-    async def get_device_activity(self, device_id: str, limit: int = 20) -> List[Dict[str, Any]]:
-        try:
-            events = await self.dynamo_repository.get_device_events(device_id, limit)
-
-            return [
-                {
-                    "timestamp": event.get("timestamp"),
-                    "event_type": event.get("event_type"),
-                    "event_data": event.get("event_data", {}),
-                }
-                for event in events
-            ]
-
-        except Exception as e:
-            logger.exception(f"Erro ao obter atividades do dispositivo: {e}")
-            raise
-
     async def update_global_config(self, global_config: Dict[str, Any]) -> Dict[str, Any]:
         try:
             devices = await self.dynamo_repository.list_devices(status_filter="online", limit=1000)
@@ -282,11 +218,6 @@ class DeviceService:
                 for device in devices:
                     device.update_config(device_config_updates)
                     await self.dynamo_repository.save_device(device)
-
-                    await self._log_device_event(
-                        device, "global_config_applied", {"config_updates": device_config_updates}
-                    )
-
                     affected_devices += 1
 
             logger.info(f"Configuração global aplicada a {affected_devices} dispositivos")
@@ -308,11 +239,6 @@ class DeviceService:
                 if not device.is_online(timeout_minutes=timeout_minutes):
                     device.status = "offline"
                     await self.dynamo_repository.save_device(device)
-
-                    await self._log_device_event(
-                        device, "device_offline_detected", {"timeout_minutes": timeout_minutes}
-                    )
-
                     offline_device_ids.append(device.device_id)
 
             if offline_device_ids:
@@ -324,15 +250,62 @@ class DeviceService:
             logger.exception(f"Erro ao verificar dispositivos offline: {e}")
             raise
 
-    async def _log_device_event(self, device: Device, event_type: str, event_data: Dict[str, Any]) -> bool:
-        try:
-            return await self.dynamo_repository.save_device_event(device, event_type, event_data)
-        except Exception as e:
-            logger.warning(f"Falha ao registrar evento {event_type}: {e}")
-            return False
-
     async def _get_pending_commands(self, device_id: str) -> List[Dict[str, Any]]:
         return []
 
     async def _get_config_updates(self, device_id: str) -> Optional[Dict[str, Any]]:
         return None
+
+    async def get_devices_by_status(self, status: str, limit: int = 100) -> List[Device]:
+        try:
+            return await self.dynamo_repository.get_devices_by_status(status, limit)
+        except Exception as e:
+            logger.exception(f"Erro ao obter dispositivos por status {status}: {e}")
+            raise
+
+    async def get_recently_active_devices(self, limit: int = 50) -> List[Device]:
+        try:
+            return await self.dynamo_repository.get_recently_active_devices(limit)
+        except Exception as e:
+            logger.exception(f"Erro ao obter dispositivos recentes: {e}")
+            raise
+
+    async def get_location_analytics(self, location: str) -> Dict[str, Any]:
+        try:
+            devices = await self.dynamo_repository.get_devices_by_location(location)
+
+            status_counts = {}
+            for device in devices:
+                status_counts[device.status] = status_counts.get(device.status, 0) + 1
+
+            active_devices = sorted(
+                [d for d in devices if d.stats and d.stats.get("total_captures", 0) > 0],
+                key=lambda d: d.stats.get("total_captures", 0),
+                reverse=True,
+            )[:5]
+
+            now = datetime.now(timezone.utc)
+            recent_activity = sum(1 for d in devices if d.last_seen and (now - d.last_seen).total_seconds() < 3600)
+
+            return {
+                "location": location,
+                "total_devices": len(devices),
+                "status_breakdown": status_counts,
+                "recent_activity_count": recent_activity,
+                "top_active_devices": [
+                    {
+                        "device_id": d.device_id,
+                        "device_name": d.device_name,
+                        "total_captures": d.stats.get("total_captures", 0),
+                        "last_seen": d.last_seen.isoformat() if d.last_seen else None,
+                    }
+                    for d in active_devices
+                ],
+                "average_captures": (
+                    sum(d.stats.get("total_captures", 0) for d in devices) / len(devices) if devices else 0
+                ),
+            }
+
+        except Exception as e:
+            logger.exception(f"Erro ao obter análise da localização {location}: {e}")
+            raise
