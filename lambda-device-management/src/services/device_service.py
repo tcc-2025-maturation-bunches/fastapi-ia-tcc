@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fruit_detection_shared.domain.entities import Device
@@ -254,3 +255,57 @@ class DeviceService:
 
     async def _get_config_updates(self, device_id: str) -> Optional[Dict[str, Any]]:
         return None
+
+    async def get_devices_by_status(self, status: str, limit: int = 100) -> List[Device]:
+        try:
+            return await self.dynamo_repository.get_devices_by_status(status, limit)
+        except Exception as e:
+            logger.exception(f"Erro ao obter dispositivos por status {status}: {e}")
+            raise
+
+    async def get_recently_active_devices(self, limit: int = 50) -> List[Device]:
+        try:
+            return await self.dynamo_repository.get_recently_active_devices(limit)
+        except Exception as e:
+            logger.exception(f"Erro ao obter dispositivos recentes: {e}")
+            raise
+
+    async def get_location_analytics(self, location: str) -> Dict[str, Any]:
+        try:
+            devices = await self.dynamo_repository.get_devices_by_location(location)
+
+            status_counts = {}
+            for device in devices:
+                status_counts[device.status] = status_counts.get(device.status, 0) + 1
+
+            active_devices = sorted(
+                [d for d in devices if d.stats and d.stats.get("total_captures", 0) > 0],
+                key=lambda d: d.stats.get("total_captures", 0),
+                reverse=True,
+            )[:5]
+
+            now = datetime.now(timezone.utc)
+            recent_activity = sum(1 for d in devices if d.last_seen and (now - d.last_seen).total_seconds() < 3600)
+
+            return {
+                "location": location,
+                "total_devices": len(devices),
+                "status_breakdown": status_counts,
+                "recent_activity_count": recent_activity,
+                "top_active_devices": [
+                    {
+                        "device_id": d.device_id,
+                        "device_name": d.device_name,
+                        "total_captures": d.stats.get("total_captures", 0),
+                        "last_seen": d.last_seen.isoformat() if d.last_seen else None,
+                    }
+                    for d in active_devices
+                ],
+                "average_captures": (
+                    sum(d.stats.get("total_captures", 0) for d in devices) / len(devices) if devices else 0
+                ),
+            }
+
+        except Exception as e:
+            logger.exception(f"Erro ao obter análise da localização {location}: {e}")
+            raise

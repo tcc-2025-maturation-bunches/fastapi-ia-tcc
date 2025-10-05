@@ -88,9 +88,11 @@ class Device:
         self.updated_at = datetime.now(timezone.utc)
 
     def to_dict(self) -> Dict[str, Any]:
+        last_seen_str = self.last_seen.strftime("%Y-%m-%d#%H:%M:%S") if self.last_seen else "2025-01-01#00:00:00"
+        sk = f"STATUS#{self.status}#LASTSEEN#{last_seen_str}"
         return {
             "pk": f"DEVICE#{self.device_id}",
-            "sk": f"INFO#{self.device_id}",
+            "sk": sk,
             "entity_type": "DEVICE",
             "device_id": self.device_id,
             "device_name": self.device_name,
