@@ -20,8 +20,8 @@ class DynamoRepository:
             item.update(
                 {
                     "entity_type": "DEVICE",
-                    "createdAt": device.created_at.isoformat(),
-                    "updatedAt": device.updated_at.isoformat(),
+                    "created_at": device.created_at.isoformat(),
+                    "updated_at": device.updated_at.isoformat(),
                 }
             )
             await self.dynamo_client.put_item(item)
@@ -199,7 +199,7 @@ class DynamoRepository:
             key = {"pk": f"DEVICE#{device_id}", "sk": f"INFO#{device_id}"}
             now = datetime.now(timezone.utc).isoformat()
 
-            update_expression = "SET config = :config, updatedAt = :updated_at"
+            update_expression = "SET config = :config, updated_at = :updated_at"
             expression_values = {
                 ":config": config,
                 ":updated_at": now,
@@ -223,7 +223,7 @@ class DynamoRepository:
             key = {"pk": f"DEVICE#{device_id}", "sk": f"INFO#{device_id}"}
             now = datetime.now(timezone.utc).isoformat()
 
-            update_expression = "SET stats = :stats, updatedAt = :updated_at, last_seen = :last_seen"
+            update_expression = "SET stats = :stats, updated_at = :updated_at, last_seen = :last_seen"
             expression_values = {
                 ":stats": stats,
                 ":updated_at": now,
@@ -290,7 +290,7 @@ class DynamoRepository:
             key = {"pk": f"DEVICE#{device_id}", "sk": f"INFO#{device_id}"}
             now = datetime.now(timezone.utc).isoformat()
 
-            update_expression = "SET last_seen = :last_seen, updatedAt = :updated_at"
+            update_expression = "SET last_seen = :last_seen, updated_at = :updated_at"
             expression_values = {
                 ":last_seen": now,
                 ":updated_at": now,
