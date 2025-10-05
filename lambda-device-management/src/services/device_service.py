@@ -229,7 +229,11 @@ class DeviceService:
                     "total_captures": item.get("total_captures", 0),
                     "successful_captures": item.get("successful_captures", 0),
                     "failed_captures": item.get("failed_captures", 0),
-                    "success_rate": (item.get("successful_captures", 0) / max(1, item.get("total_captures", 1)) * 100),
+                    "success_rate": (
+                        0
+                        if item.get("total_captures", 0) == 0
+                        else (item.get("successful_captures", 0) / item.get("total_captures", 0) * 100)
+                    ),
                     "average_processing_time_ms": item.get("average_processing_time_ms", 0),
                 }
                 for item in stats_history
