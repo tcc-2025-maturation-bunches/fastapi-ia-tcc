@@ -43,18 +43,6 @@ class DeviceStatsResponse(BaseModel):
     recent_registrations: List[Dict[str, Any]]
 
 
-class DeviceStatsHistoryResponse(BaseModel):
-    device_id: str
-    period_days: int
-    stats_history: List[Dict[str, Any]]
-
-
-class DeviceActivityResponse(BaseModel):
-    device_id: str
-    activities: List[Dict[str, Any]]
-    total_events: int
-
-
 @device_router.post(
     "/register",
     response_model=HeartbeatResponse,
@@ -126,54 +114,6 @@ async def get_device_stats():
     except Exception as e:
         logger.exception(f"Erro ao obter estatísticas: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao recuperar estatísticas")
-
-
-@device_router.get(
-    "/{device_id}/stats/history",
-    response_model=DeviceStatsHistoryResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Obter histórico de estatísticas do dispositivo",
-)
-async def get_device_stats_history(
-    device_id: str, days: int = Query(7, ge=1, le=30, description="Número de dias de histórico")
-):
-    try:
-        validate_device_id(device_id)
-        device_service = DeviceService()
-
-        stats_history = await device_service.get_device_stats_history(device_id, days)
-
-        return DeviceStatsHistoryResponse(device_id=device_id, period_days=days, stats_history=stats_history)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"Erro ao obter histórico de estatísticas: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao recuperar histórico de estatísticas"
-        )
-
-
-@device_router.get(
-    "/{device_id}/activity",
-    response_model=DeviceActivityResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Obter histórico de atividades do dispositivo",
-)
-async def get_device_activity(device_id: str, limit: int = Query(20, ge=1, le=100, description="Número de eventos")):
-    try:
-        validate_device_id(device_id)
-        device_service = DeviceService()
-
-        activities = await device_service.get_device_activity(device_id, limit)
-
-        return DeviceActivityResponse(device_id=device_id, activities=activities, total_events=len(activities))
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"Erro ao obter atividades: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao recuperar atividades")
 
 
 @device_router.post(
