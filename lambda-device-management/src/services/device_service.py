@@ -20,17 +20,8 @@ class DeviceService:
             existing_device = await self.dynamo_repository.get_device_by_id(request.device_id)
 
             if existing_device:
-                logger.info(f"Dispositivo {request.device_id} já existe, atualizando heartbeat")
-                existing_device.update_heartbeat(status=request.status)
-                await self.dynamo_repository.save_device(existing_device)
-
-                return {
-                    "device_id": existing_device.device_id,
-                    "status": existing_device.status,
-                    "last_seen": existing_device.last_seen.isoformat(),
-                    "config": existing_device.config,
-                    "message": "Dispositivo já registrado, heartbeat atualizado",
-                }
+                logger.info(f"Dispositivo {request.device_id} já existe. Registro ignorado.")
+                raise ValueError(f"Dispositivo {request.device_id} já registrado")
 
             device = Device(
                 device_id=request.device_id,
