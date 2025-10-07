@@ -22,7 +22,7 @@ class Device:
         self.device_name = device_name
         self.location = location
         self.capabilities = capabilities or {}
-        self.status = status
+        self.status = status  # pending, online, offline, maintenance, error
         self.created_at = created_at or datetime.now(timezone.utc)
         self.updated_at = updated_at or datetime.now(timezone.utc)
         self.last_seen = last_seen or datetime.now(timezone.utc)
@@ -88,17 +88,19 @@ class Device:
         self.updated_at = datetime.now(timezone.utc)
 
     def to_dict(self) -> Dict[str, Any]:
+        last_seen_str = self.last_seen.strftime("%Y-%m-%d#%H:%M:%S") if self.last_seen else "2025-01-01#00:00:00"
+        sk = f"STATUS#{self.status}#LASTSEEN#{last_seen_str}"
         return {
             "pk": f"DEVICE#{self.device_id}",
-            "sk": "METADATA",
+            "sk": sk,
             "entity_type": "DEVICE",
             "device_id": self.device_id,
             "device_name": self.device_name,
             "location": self.location,
             "capabilities": self.capabilities,
             "status": self.status,
-            "createdAt": self.created_at.isoformat(),
-            "updatedAt": self.updated_at.isoformat(),
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
             "capture_interval": self.capture_interval,
             "stats": self.stats,
@@ -106,45 +108,15 @@ class Device:
             "is_online": self.is_online(),
         }
 
-    def to_stats_item(self, date: Optional[datetime] = None) -> Dict[str, Any]:
-        stats_date = (date or datetime.now(timezone.utc)).date().isoformat()
-
-        return {
-            "pk": f"DEVICE#{self.device_id}",
-            "sk": f"STATS#{stats_date}",
-            "entity_type": "DEVICE_STATS",
-            "device_id": self.device_id,
-            "date": stats_date,
-            "total_captures": self.stats.get("total_captures", 0),
-            "successful_captures": self.stats.get("successful_captures", 0),
-            "failed_captures": self.stats.get("failed_captures", 0),
-            "average_processing_time_ms": self.stats.get("average_processing_time_ms", 0),
-            "uptime_hours": self.stats.get("uptime_hours", 0),
-            "createdAt": datetime.now(timezone.utc).isoformat(),
-        }
-
-    def to_event_item(self, event_type: str, event_data: Dict[str, Any]) -> Dict[str, Any]:
-        timestamp = datetime.now(timezone.utc)
-
-        return {
-            "pk": f"DEVICE#{self.device_id}",
-            "sk": f"EVENT#{timestamp.isoformat()}",
-            "entity_type": "DEVICE_EVENT",
-            "device_id": self.device_id,
-            "event_type": event_type,
-            "event_data": event_data,
-            "timestamp": timestamp.isoformat(),
-        }
-
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Device":
         created_at = None
-        if data.get("createdAt"):
-            created_at = datetime.fromisoformat(data["createdAt"])
+        if data.get("created_at"):
+            created_at = datetime.fromisoformat(data["created_at"])
 
         updated_at = None
-        if data.get("updatedAt"):
-            updated_at = datetime.fromisoformat(data["updatedAt"])
+        if data.get("updated_at"):
+            updated_at = datetime.fromisoformat(data["updated_at"])
 
         last_seen = None
         if data.get("last_seen"):

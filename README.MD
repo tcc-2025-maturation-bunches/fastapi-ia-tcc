@@ -76,7 +76,7 @@ Este índice deve ser criado em **APENAS 2 tabelas** do projeto:
 
 - **Nome do Índice**: `EntityTypeIndex`
 - **Chave de Partição (PK)**: `entity_type` (String)
-- **Chave de Ordenação (SK)**: `createdAt` (String)
+- **Chave de Ordenação (SK)**: `created_at` (String)
 - **Projeção**: `ALL` (todos os atributos)
 - **Modo de Capacidade**: Usar o mesmo da tabela principal
 
@@ -90,7 +90,7 @@ Este índice deve ser criado em **APENAS 2 tabelas** do projeto:
      ```
      Index name: EntityTypeIndex
      Partition key: entity_type (String)
-     Sort key: createdAt (String)
+     Sort key: created_at (String)
      Projected attributes: All
      ```
    - Clique em "Create index"
@@ -103,14 +103,14 @@ aws dynamodb update-table \
     --table-name seu-nome-tabela-resultados \
     --attribute-definitions \
         AttributeName=entity_type,AttributeType=S \
-        AttributeName=createdAt,AttributeType=S \
+        AttributeName=created_at,AttributeType=S \
     --global-secondary-index-updates \
         '[{
             "Create": {
                 "IndexName": "EntityTypeIndex",
                 "KeySchema": [
                     {"AttributeName": "entity_type", "KeyType": "HASH"},
-                    {"AttributeName": "createdAt", "KeyType": "RANGE"}
+                    {"AttributeName": "created_at", "KeyType": "RANGE"}
                 ],
                 "Projection": {"ProjectionType": "ALL"},
                 "ProvisionedThroughput": {
@@ -125,14 +125,14 @@ aws dynamodb update-table \
     --table-name seu-nome-tabela-dispositivos \
     --attribute-definitions \
         AttributeName=entity_type,AttributeType=S \
-        AttributeName=createdAt,AttributeType=S \
+        AttributeName=created_at,AttributeType=S \
     --global-secondary-index-updates \
         '[{
             "Create": {
                 "IndexName": "EntityTypeIndex",
                 "KeySchema": [
                     {"AttributeName": "entity_type", "KeyType": "HASH"},
-                    {"AttributeName": "createdAt", "KeyType": "RANGE"}
+                    {"AttributeName": "created_at", "KeyType": "RANGE"}
                 ],
                 "Projection": {"ProjectionType": "ALL"},
                 "ProvisionedThroughput": {
@@ -150,11 +150,11 @@ O `EntityTypeIndex` foi projetado para otimizar as seguintes consultas:
 
 1. **Buscar todos os resultados de inferência** (`GET /storage/results/all`)
    - Consulta por `entity_type = "RESULT"` ou `entity_type = "COMBINED_RESULT"`
-   - Ordenação cronológica por `createdAt`
+   - Ordenação cronológica por `created_at`
 
 2. **Buscar todos os dispositivos** (`GET /devices/all`)
    - Consulta por `entity_type = "DEVICE"`
-   - Ordenação cronológica por `createdAt`
+   - Ordenação cronológica por `created_at`
 
 3. **Análises e relatórios**
    - Agregações por tipo de entidade
@@ -166,7 +166,7 @@ O `EntityTypeIndex` foi projetado para otimizar as seguintes consultas:
 - **Tabela de Dispositivos**: `"DEVICE"`
 - **Tabela de Atividades**: ❌ **Não utiliza entity_type** (estrutura própria otimizada)
 
-### Formato do Campo createdAt:
+### Formato do Campo created_at:
 
 - **Formato**: ISO 8601 UTC (ex: `"2024-12-09T15:30:45.123Z"`)
 - **Ordenação**: Decrescente (mais recentes primeiro)
@@ -262,7 +262,7 @@ Além do `EntityTypeIndex`, considere criar os seguintes índices para melhor pe
 
 1. **UserIdIndex** - Para consultas por usuário
    - PK: `user_id`
-   - SK: `createdAt`
+   - SK: `created_at`
 
 2. **StatusIndex** - Para consultas por status (dispositivos)
    - PK: `status`
@@ -270,7 +270,7 @@ Além do `EntityTypeIndex`, considere criar os seguintes índices para melhor pe
 
 3. **RequestIdIndex** - Para consultas por request_id
    - PK: `request_id`
-   - SK: `createdAt`
+   - SK: `created_at`
 
 ### Monitoramento
 

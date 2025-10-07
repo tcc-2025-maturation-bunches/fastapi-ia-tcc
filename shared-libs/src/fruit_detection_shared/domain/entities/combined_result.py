@@ -214,8 +214,8 @@ class CombinedResult:
             image_url=data.get("image_url"),
             pk=data.get("pk"),
             sk=data.get("sk"),
-            createdAt=data.get("createdAt"),
-            updatedAt=data.get("updatedAt"),
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at"),
             initial_metadata=data.get("initial_metadata"),
             additional_metadata=data.get("additional_metadata"),
         )
