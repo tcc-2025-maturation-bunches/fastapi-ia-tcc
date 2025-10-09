@@ -54,7 +54,9 @@ curl -X POST "http://localhost:8000/users/" \
   "username": "joao",
   "name": "João Silva",
   "email": "joao@example.com",
-  "user_type": "user"
+  "user_type": "user",
+  "created_at": "2025-10-08T14:30:00.000000+00:00",
+  "updated_at": "2025-10-08T14:30:00.000000+00:00"
 }
 ```
 
@@ -115,7 +117,9 @@ curl -X GET "http://localhost:8000/users/$USER_ID"
   "username": "joao",
   "name": "João Silva",
   "email": "joao@example.com",
-  "user_type": "user"
+  "user_type": "user",
+  "created_at": "2025-10-08T14:30:00.000000+00:00",
+  "updated_at": "2025-10-08T14:30:00.000000+00:00"
 }
 ```
 
@@ -139,7 +143,9 @@ curl -X PUT "http://localhost:8000/users/$USER_ID" \
   "username": "joao",
   "name": "João da Silva Santos",
   "email": "joao.santos@example.com",
-  "user_type": "user"
+  "user_type": "user",
+  "created_at": "2025-10-08T14:30:00.000000+00:00",
+  "updated_at": "2025-10-08T14:35:00.000000+00:00"
 }
 ```
 

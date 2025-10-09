@@ -44,7 +44,13 @@ async def get_user(user_id: str, user_service: UserService = Depends(get_user_se
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Usuário com ID '{user_id}' não encontrado")
 
     return UserResponse(
-        id=user.user_id, username=user.username, name=user.name, email=user.email, user_type=user.user_type
+        id=user.user_id,
+        username=user.username,
+        name=user.name,
+        email=user.email,
+        user_type=user.user_type,
+        created_at=user.created_at,
+        updated_at=user.updated_at
     )
 
 
@@ -83,7 +89,13 @@ async def create_user(user_data: UserCreate, user_service: UserService = Depends
         logger.info(f"Usuário criado com sucesso: {user.username}")
 
         return UserResponse(
-            id=user.user_id, username=user.username, name=user.name, email=user.email, user_type=user.user_type
+            id=user.user_id,
+            username=user.username,
+            name=user.name,
+            email=user.email,
+            user_type=user.user_type,
+            created_at=user.created_at,
+            updated_at=user.updated_at
         )
 
     except ValueError as e:
@@ -129,7 +141,13 @@ async def update_user(user_id: str, user_update: UserUpdate, user_service: UserS
         logger.info(f"Usuário atualizado com sucesso: {user_id}")
 
         return UserResponse(
-            id=user.user_id, username=user.username, name=user.name, email=user.email, user_type=user.user_type
+            id=user.user_id,
+            username=user.username,
+            name=user.name,
+            email=user.email,
+            user_type=user.user_type,
+            created_at=user.created_at,
+            updated_at=user.updated_at
         )
 
     except ValueError as e:

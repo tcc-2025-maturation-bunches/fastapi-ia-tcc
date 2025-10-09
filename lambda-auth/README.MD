@@ -58,8 +58,8 @@ Lambda responsável por autenticação e gerenciamento de usuários para o siste
 - `name`: Nome completo
 - `email`: E-mail
 - `user_type`: Tipo de usuário (admin/user)
-- `createdAt`: Data de criação (ISO 8601)
-- `updatedAt`: Data de última atualização (ISO 8601)
+- `created_at`: Data de criação (ISO 8601)
+- `updated_at`: Data de última atualização (ISO 8601)
 
 ## Como rodar localmente
 

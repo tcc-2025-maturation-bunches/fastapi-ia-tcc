@@ -61,6 +61,8 @@ class UserService:
 
             user_id = str(uuid.uuid4())
             password_hash = self.get_password_hash(password)
+            
+            now = datetime.now(timezone.utc)
 
             user_data = {
                 "user_id": user_id,
@@ -69,15 +71,23 @@ class UserService:
                 "name": name,
                 "email": email,
                 "user_type": user_type,
-                "createdAt": datetime.now(timezone.utc).isoformat(),
-                "updatedAt": datetime.now(timezone.utc).isoformat(),
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),
             }
 
             await self.repository.create_user(user_data)
 
             logger.info(f"Usuário criado com sucesso: {username} (ID: {user_id})")
 
-            return User(user_id=user_id, username=username, name=name, email=email, user_type=user_type)
+            return User(
+                user_id=user_id,
+                username=username,
+                name=name,
+                email=email,
+                user_type=user_type,
+                created_at=now,
+                updated_at=now
+            )
 
         except ValueError:
             raise
@@ -101,13 +111,7 @@ class UserService:
             if not user_data:
                 return None
 
-            return User(
-                user_id=user_data.get("user_id"),
-                username=user_data.get("username"),
-                name=user_data.get("name"),
-                email=user_data.get("email"),
-                user_type=user_data.get("user_type"),
-            )
+            return User.from_dict(user_data)
 
         except Exception as e:
             logger.exception(f"Erro ao buscar usuário por ID: {e}")
@@ -129,13 +133,7 @@ class UserService:
             if not user_data:
                 return None
 
-            return User(
-                user_id=user_data.get("user_id"),
-                username=user_data.get("username"),
-                name=user_data.get("name"),
-                email=user_data.get("email"),
-                user_type=user_data.get("user_type"),
-            )
+            return User.from_dict(user_data)
 
         except Exception as e:
             logger.exception(f"Erro ao buscar usuário por username: {e}")
@@ -170,7 +168,7 @@ class UserService:
             if not existing_user:
                 raise ValueError(f"Usuário com ID '{user_id}' não encontrado")
 
-            update_data = {"updatedAt": datetime.now(timezone.utc).isoformat()}
+            update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
 
             if name:
                 update_data["name"] = name
