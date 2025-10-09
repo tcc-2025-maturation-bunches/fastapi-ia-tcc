@@ -5,7 +5,7 @@ Biblioteca compartilhada para o sistema de detecção e maturação de frutas
 
 __version__ = "0.2.0"
 
-from .domain.entities import CombinedResult, Device, Image
+from .domain.entities import CombinedResult, Device, Image, User
 from .domain.models import (
     CombinedContractResponse,
     ContractDetection,
@@ -33,6 +33,7 @@ __all__ = [
     "CombinedResult",
     "Device",
     "Image",
+    "User",
     # Contract Models (usados internamente entre serviços)
     "CombinedContractResponse",
     "ContractDetection",
