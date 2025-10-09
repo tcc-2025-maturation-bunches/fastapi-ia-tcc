@@ -50,7 +50,7 @@ async def get_user(user_id: str, user_service: UserService = Depends(get_user_se
         email=user.email,
         user_type=user.user_type,
         created_at=user.created_at,
-        updated_at=user.updated_at
+        updated_at=user.updated_at,
     )
 
 
@@ -95,7 +95,7 @@ async def create_user(user_data: UserCreate, user_service: UserService = Depends
             email=user.email,
             user_type=user.user_type,
             created_at=user.created_at,
-            updated_at=user.updated_at
+            updated_at=user.updated_at,
         )
 
     except ValueError as e:
@@ -147,7 +147,7 @@ async def update_user(user_id: str, user_update: UserUpdate, user_service: UserS
             email=user.email,
             user_type=user.user_type,
             created_at=user.created_at,
-            updated_at=user.updated_at
+            updated_at=user.updated_at,
         )
 
     except ValueError as e:

@@ -61,7 +61,7 @@ class UserService:
 
             user_id = str(uuid.uuid4())
             password_hash = self.get_password_hash(password)
-            
+
             now = datetime.now(timezone.utc)
 
             user_data = {
@@ -86,7 +86,7 @@ class UserService:
                 email=email,
                 user_type=user_type,
                 created_at=now,
-                updated_at=now
+                updated_at=now,
             )
 
         except ValueError:

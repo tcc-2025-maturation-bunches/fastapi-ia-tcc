@@ -6,6 +6,7 @@ from pydantic import BaseModel, EmailStr
 
 class UserCreate(BaseModel):
     """Model para criação de usuário (request)"""
+
     username: str
     name: str
     email: EmailStr
@@ -15,6 +16,7 @@ class UserCreate(BaseModel):
 
 class UserUpdate(BaseModel):
     """Model para atualização de usuário (request)"""
+
     name: Optional[str] = None
     email: Optional[EmailStr] = None
     password: Optional[str] = None
@@ -23,6 +25,7 @@ class UserUpdate(BaseModel):
 
 class UserResponse(BaseModel):
     """Model para resposta de usuário (response)"""
+
     id: str
     username: str
     name: str
