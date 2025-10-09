@@ -1,18 +1,18 @@
-from typing import Any, Dict, Optional
 from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 
 
 class User:
     def __init__(
-            self, 
-            user_id: str, 
-            username: str, 
-            name: str, 
-            email: str, 
-            user_type: str, 
-            created_at: Optional[datetime] = None, 
-            updated_at: Optional[datetime] = None
-        ):
+        self,
+        user_id: str,
+        username: str,
+        name: str,
+        email: str,
+        user_type: str,
+        created_at: Optional[datetime] = None,
+        updated_at: Optional[datetime] = None,
+    ):
         self.user_id = user_id
         self.username = username
         self.name = name

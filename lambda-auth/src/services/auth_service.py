@@ -1,6 +1,6 @@
+import logging
 from datetime import timedelta
 from typing import Dict, Optional
-import logging
 
 from pwdlib import PasswordHash
 
@@ -11,6 +11,7 @@ from src.utils.jwt_utils import create_access_token, decode_access_token
 logger = logging.getLogger(__name__)
 
 pwd_context = PasswordHash.recommended()
+
 
 class AuthService:
     def __init__(self, repository: Optional[DynamoRepository] = None):
@@ -51,8 +52,7 @@ class AuthService:
         }
 
         access_token = create_access_token(
-            data=token_data, 
-            expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+            data=token_data, expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         )
 
         return {
@@ -65,7 +65,7 @@ class AuthService:
                 "name": user.get("name"),
                 "email": user.get("email"),
                 "user_type": user.get("user_type"),
-            }
+            },
         }
 
     async def login(self, username: str, password: str) -> Optional[Dict[str, str]]:
@@ -82,10 +82,10 @@ class AuthService:
     async def refresh_user_data(self, user_id: str) -> Optional[Dict[str, str]]:
         try:
             user = await self.repository.get_user_by_id(user_id)
-            
+
             if not user:
                 return None
-            
+
             return {
                 "user_id": user.get("user_id"),
                 "username": user.get("username"),
