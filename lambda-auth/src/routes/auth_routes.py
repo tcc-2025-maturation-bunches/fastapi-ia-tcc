@@ -1,35 +1,56 @@
 import logging
+from typing import Optional
 
-from fastapi import APIRouter, Depends
-from fastapi_jwt_auth import AuthJWT
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from src.models.login_model import AuthResponse, LoginRequest
+from src.services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
 
 auth_router = APIRouter()
 
 
+def get_auth_service() -> AuthService:
+    """Dependency injection para AuthService"""
+    return AuthService()
+
+
 @auth_router.post(
     "/login",
-    responses=AuthResponse,
+    response_model=AuthResponse,
     summary="Login do usuário",
     description="Autenticar usuário e emitir token JWT",
     tags=["Auth"],
+    status_code=status.HTTP_200_OK,
 )
-def login(login_req: LoginRequest, Authorize: AuthJWT = Depends()):
-    pass
+async def login(login_req: LoginRequest, auth_service: AuthService = Depends(get_auth_service)):
+    """
+    Autentica um usuário e retorna um token JWT.
 
+    Args:
+        login_req: Credenciais de login (username e password)
 
-@auth_router.get(
-    "/refresh",
-    response_model=AuthResponse,
-    summary="Atualizar token JWT",
-    description="Atualizar token JWT usando um token de atualização válido",
-    tags=["Auth"],
-)
-def refresh_token(Authorize: AuthJWT = Depends()):
-    pass
+    Returns:
+        Token JWT e informações adicionais
+
+    Raises:
+        HTTPException: Se as credenciais forem inválidas
+    """
+    logger.info(f"Tentativa de login para usuário: {login_req.username}")
+
+    result = await auth_service.login(login_req.username, login_req.password)
+
+    if not result:
+        logger.warning(f"Login falhou para usuário: {login_req.username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usuário ou senha inválidos",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    logger.info(f"Login bem-sucedido para usuário: {login_req.username}")
+    return result
 
 
 @auth_router.get(
@@ -37,6 +58,56 @@ def refresh_token(Authorize: AuthJWT = Depends()):
     summary="Verificar token JWT",
     description="Verificar a validade do token JWT",
     tags=["Auth"],
+    status_code=status.HTTP_200_OK,
 )
-def verify_token(Authorize: AuthJWT = Depends()):
-    pass
+async def verify_token(
+    authorization: Optional[str] = Header(None), auth_service: AuthService = Depends(get_auth_service)
+):
+    """
+    Verifica se um token JWT é válido e retorna suas informações.
+
+    Args:
+        authorization: Header Authorization com o token Bearer
+
+    Returns:
+        Informações do token decodificado
+
+    Raises:
+        HTTPException: Se o token for inválido ou ausente
+    """
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de autenticação não fornecido",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Extrai o token do header "Bearer <token>"
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise ValueError("Esquema de autenticação inválido")
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Formato de token inválido. Use 'Bearer <token>'",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    payload = auth_service.verify_token(token)
+
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido ou expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return {
+        "valid": True,
+        "username": payload.get("sub"),
+        "user_id": payload.get("user_id"),
+        "user_type": payload.get("user_type"),
+        "name": payload.get("name"),
+        "expires_at": payload.get("exp"),
+    }
