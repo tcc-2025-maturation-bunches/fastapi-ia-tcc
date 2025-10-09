@@ -3,7 +3,7 @@ Domain Layer - Fruit Detection Shared
 Camada de domínio com entidades, modelos e regras de negócio
 """
 
-from .entities import CombinedResult, Device, Image
+from .entities import CombinedResult, Device, Image, User
 from .enums import ModelType
 from .exceptions import PartialProcessingError, ProcessingException
 from .models import (
@@ -23,6 +23,7 @@ __all__ = [
     "CombinedResult",
     "Device",
     "Image",
+    "User",
     "ModelType",
     "ProcessingException",
     "PartialProcessingError",
