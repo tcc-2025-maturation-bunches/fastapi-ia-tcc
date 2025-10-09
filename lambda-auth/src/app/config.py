@@ -8,8 +8,10 @@ class Settings:
         self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
         self.AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
-        # JWT settings
-        self.JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change")
+        self.DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", f"fruit-detection-{self.ENVIRONMENT}-users")
+
+        self.JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-this-secret-key-in-production")
+        self.JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
         self.ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
         self.SERVICE_NAME = "auth-lambda"
