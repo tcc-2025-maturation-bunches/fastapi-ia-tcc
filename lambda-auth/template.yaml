@@ -22,8 +22,9 @@ Globals:
         ENVIRONMENT: !Ref Environment
         LOG_LEVEL: INFO
         AWS_REGION: !Ref AWS::Region
-        JWT_SECRET_KEY: change
+        JWT_SECRET_KEY: !Sub '{{resolve:secretsmanager:fruit-detection-${Environment}-jwt-secret:SecretString:key}}'
         ACCESS_TOKEN_EXPIRE_MINUTES: 30
+        DYNAMODB_TABLE_NAME: !Sub fruit-detection-${Environment}-users
 
 Resources:
   AuthFunction:
@@ -48,6 +49,25 @@ Resources:
             Path: /
             Method: ANY
             RestApiId: !Ref ApiGateway
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/fruit-detection-${Environment}-users
+                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/fruit-detection-${Environment}-users/index/*
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource:
+                - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:fruit-detection-${Environment}-jwt-secret-*
 
   ApiGateway:
     Type: AWS::Serverless::Api
@@ -55,7 +75,7 @@ Resources:
       Name: !Sub fruit-detection-${Environment}-auth-api
       StageName: !Ref Environment
       Cors:
-        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
         AllowHeaders: "'*'"
         AllowOrigin: "'*'"
 
