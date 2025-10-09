@@ -4,15 +4,16 @@ from pydantic import BaseModel, EmailStr
 
 
 class UserCreate(BaseModel):
-    id: str
+    """Model para criação de usuário (request)"""
     username: str
     name: str
-    email: str
+    email: EmailStr
     password: str
-    user_type: str
+    user_type: str = "user"
 
 
 class UserUpdate(BaseModel):
+    """Model para atualização de usuário (request)"""
     name: Optional[str] = None
     email: Optional[EmailStr] = None
     password: Optional[str] = None
@@ -20,6 +21,7 @@ class UserUpdate(BaseModel):
 
 
 class UserResponse(BaseModel):
+    """Model para resposta de usuário (response)"""
     id: str
     username: str
     name: str
