@@ -48,8 +48,7 @@ async def login(login_req: LoginRequest, auth_service: AuthService = Depends(get
     status_code=status.HTTP_200_OK,
 )
 async def verify_token(
-        authorization: Optional[str] = Header(None),
-        auth_service: AuthService = Depends(get_auth_service)
+    authorization: Optional[str] = Header(None), auth_service: AuthService = Depends(get_auth_service)
 ):
     if not authorization:
         raise HTTPException(
@@ -99,8 +98,7 @@ async def verify_token(
     status_code=status.HTTP_200_OK,
 )
 async def get_current_user(
-        authorization: Optional[str] = Header(None),
-        auth_service: AuthService = Depends(get_auth_service)
+    authorization: Optional[str] = Header(None), auth_service: AuthService = Depends(get_auth_service)
 ):
     if not authorization:
         raise HTTPException(
@@ -133,9 +131,6 @@ async def get_current_user(
     user_data = await auth_service.refresh_user_data(user_id)
 
     if not user_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuário não encontrado"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado")
 
     return user_data
