@@ -1,5 +1,5 @@
-from .login_model import AuthResponse, LoginRequest
-from .user_model import (
+from src.models.login_model import AuthResponse, LoginRequest
+from src.models.user_model import (
     UserCreate,
     UserResponse,
     UserUpdate,
