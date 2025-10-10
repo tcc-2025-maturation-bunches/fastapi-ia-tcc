@@ -62,8 +62,8 @@ jobs:
       - name: Verificar formatação com Black e Ruff
         working-directory: lambda-auth
         run: |
-          black --check src/ || echo "Black não instalado"
-          ruff check src/ || echo "Ruff não instalado"
+          black --check src/ || echo "Black não configurado"
+          ruff check src/ || echo "Ruff não configurado"
 
       - name: Executar testes
         working-directory: lambda-auth
@@ -88,39 +88,37 @@ jobs:
       - name: Criar pacote de implantação
         working-directory: lambda-auth
         run: |
-          mkdir -p deployment/python
+          mkdir -p deployment/src
           
-          pip install --upgrade pip
+          cp -r src/* deployment/src/
           
-          pip install \
-            --platform manylinux2014_x86_64 \
-            --target=deployment/python \
-            --implementation cp \
-            --python-version 3.13 \
-            --only-binary=:all: \
-            --upgrade \
-            -r requirements.txt
+          pip install --platform manylinux2014_x86_64 \
+                      --target=deployment/ \
+                      --implementation cp \
+                      --python-version 3.13 \
+                      --only-binary=:all: \
+                      --upgrade \
+                      -r requirements.txt
           
           cd ../shared-libs
-          pip install \
-            --platform manylinux2014_x86_64 \
-            --target=../lambda-auth/deployment/python \
-            --implementation cp \
-            --python-version 3.13 \
-            --only-binary=:all: \
-            --upgrade \
-            .
+          pip install --platform manylinux2014_x86_64 \
+                      --target=../lambda-auth/deployment/ \
+                      --implementation cp \
+                      --python-version 3.13 \
+                      --only-binary=:all: \
+                      --upgrade \
+                      .
           cd ../lambda-auth
           
-          cp -r src deployment/
-          
           cd deployment
-          zip -r ../lambda-auth.zip . -x "*.pyc" -x "*__pycache__*" -x "*.dist-info*"
+          zip -r ../lambda-auth.zip . -x "*.pyc" -x "__pycache__/*" -x "*.dist-info/*"
           cd ..
           
           echo "Package size: $(du -h lambda-auth.zip | cut -f1)"
           
-          unzip -l lambda-auth.zip | head -20
+          if [ $(stat -f%z lambda-auth.zip 2>/dev/null || stat -c%s lambda-auth.zip) -gt 52428800 ]; then
+            echo "⚠️ Warning: Package size exceeds 50MB"
+          fi
 
       - name: Upload artefato
         uses: actions/upload-artifact@v4
@@ -234,6 +232,13 @@ jobs:
 
           echo "Resposta da Lambda:"
           cat response.json
+          
+          if grep -q '"status":"ok"' response.json; then
+            echo "✅ Health check passou"
+          else
+            echo "❌ Health check falhou"
+            exit 1
+          fi
 
   deploy-prod:
     name: Implantação para Produção
@@ -270,7 +275,8 @@ jobs:
         run: |
           aws lambda update-function-code \
             --function-name ${{ env.LAMBDA_NAME }}-prod \
-            --zip-file fileb://lambda-auth.zip
+            --zip-file fileb://lambda-auth.zip \
+            --publish
 
       - name: Aplicar tags na função Lambda
         run: |
@@ -337,6 +343,13 @@ jobs:
           
           echo "Resposta da Lambda:"
           cat response.json
+          
+          if grep -q '"status":"ok"' response.json; then
+            echo "✅ Health check passou"
+          else
+            echo "❌ Health check falhou"
+            exit 1
+          fi
 
       - name: Notificar equipe sobre implantação no Discord
         if: always()
@@ -347,7 +360,7 @@ jobs:
           
           DESCRIPTION="Deploy da Lambda Authentication em produção"
           if [ "${{ job.status }}" == "success" ]; then
-            DESCRIPTION="$DESCRIPTION concluído com sucesso! 🎉\n\n**Funcionalidades:**\n• Autenticação JWT\n• Gerenciamento de usuários\n• Hash seguro de senhas\n• Controle de acesso"
+            DESCRIPTION="$DESCRIPTION concluído com sucesso! 🎉\n\n**Funcionalidades:**\n• Autenticação JWT\n• Gerenciamento de usuários\n• Hash seguro de senhas (Argon2)\n• Controle de acesso por tipo de usuário"
           else
             DESCRIPTION="$DESCRIPTION falhou! ❌\n\nVerifique os logs do GitHub Actions para detalhes."
           fi
