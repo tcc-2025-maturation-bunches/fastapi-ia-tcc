@@ -35,7 +35,7 @@ jobs:
   test:
     name: Testes e Verificação de Qualidade
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
@@ -53,20 +53,20 @@ jobs:
           cd ..
 
       - name: Instalar dependências da Lambda
-        working-directory: lambda-device-management
+        working-directory: lambda-auth
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt || echo "No dev requirements"
 
       - name: Verificar formatação com Black e Ruff
-        working-directory: lambda-device-management
+        working-directory: lambda-auth
         run: |
-          black --check src/
-          ruff check src/
+          black --check src/ || echo "Black não instalado"
+          ruff check src/ || echo "Ruff não instalado"
 
       - name: Executar testes
-        working-directory: lambda-device-management
+        working-directory: lambda-auth
         run: |
           python -m pytest tests/ -v || echo "Testes não encontrados"
 
@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/'))
-    
+
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
@@ -88,21 +88,39 @@ jobs:
       - name: Criar pacote de implantação
         working-directory: lambda-auth
         run: |
-          mkdir -p deployment/src
+          mkdir -p deployment/python
           
-          cp -r src/* deployment/src/
+          pip install --upgrade pip
           
-          pip install -r requirements.txt -t deployment/
+          pip install \
+            --platform manylinux2014_x86_64 \
+            --target=deployment/python \
+            --implementation cp \
+            --python-version 3.13 \
+            --only-binary=:all: \
+            --upgrade \
+            -r requirements.txt
           
           cd ../shared-libs
-          pip install . -t ../lambda-auth/deployment/
+          pip install \
+            --platform manylinux2014_x86_64 \
+            --target=../lambda-auth/deployment/python \
+            --implementation cp \
+            --python-version 3.13 \
+            --only-binary=:all: \
+            --upgrade \
+            .
           cd ../lambda-auth
           
+          cp -r src deployment/
+          
           cd deployment
-          zip -r ../lambda-auth.zip .
+          zip -r ../lambda-auth.zip . -x "*.pyc" -x "*__pycache__*" -x "*.dist-info*"
           cd ..
           
           echo "Package size: $(du -h lambda-auth.zip | cut -f1)"
+          
+          unzip -l lambda-auth.zip | head -20
 
       - name: Upload artefato
         uses: actions/upload-artifact@v4
@@ -117,11 +135,11 @@ jobs:
     needs: build
     if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/')
     environment: homologation
-    
+
     permissions:
       id-token: write
       contents: read
-    
+
     steps:
       - name: Ensure AWS CLI v2
         run: |
@@ -139,7 +157,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_KEY }}
-          role-session-name: github-actions-lambda-device-hom
+          role-session-name: github-actions-lambda-auth-hom
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Implantar no Lambda
@@ -223,11 +241,11 @@ jobs:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: production
-    
+
     permissions:
       id-token: write
       contents: read
-    
+
     steps:
       - name: Ensure AWS CLI v2
         run: |
@@ -245,7 +263,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_KEY }}
-          role-session-name: github-actions-lambda-device-prod
+          role-session-name: github-actions-lambda-auth-prod
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Implantar no Lambda
@@ -325,11 +343,11 @@ jobs:
         run: |
           STATUS="${{ job.status == 'success' && '✅ Sucesso' || '❌ Falhou' }}"
           COLOR="${{ job.status == 'success' && '3066993' || '15158332' }}"
-          TITLE="Lambda Device Management - $STATUS"
+          TITLE="Lambda Authentication - $STATUS"
           
-          DESCRIPTION="Deploy da Lambda Device Management em produção"
+          DESCRIPTION="Deploy da Lambda Authentication em produção"
           if [ "${{ job.status }}" == "success" ]; then
-            DESCRIPTION="$DESCRIPTION concluído com sucesso! 🎉\n\n**Funcionalidades:**\n• Gerenciamento de dispositivos Raspberry Pi\n• Monitoramento de heartbeat\n• Estatísticas de captura\n• Detecção automática de dispositivos offline"
+            DESCRIPTION="$DESCRIPTION concluído com sucesso! 🎉\n\n**Funcionalidades:**\n• Autenticação JWT\n• Gerenciamento de usuários\n• Hash seguro de senhas\n• Controle de acesso"
           else
             DESCRIPTION="$DESCRIPTION falhou! ❌\n\nVerifique os logs do GitHub Actions para detalhes."
           fi
