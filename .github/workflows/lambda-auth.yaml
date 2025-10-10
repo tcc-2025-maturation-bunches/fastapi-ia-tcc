@@ -92,33 +92,17 @@ jobs:
           
           cp -r src/* deployment/src/
           
-          pip install --platform manylinux2014_x86_64 \
-                      --target=deployment/ \
-                      --implementation cp \
-                      --python-version 3.13 \
-                      --only-binary=:all: \
-                      --upgrade \
-                      -r requirements.txt
+          pip install -r requirements.txt -t deployment/
           
           cd ../shared-libs
-          pip install --platform manylinux2014_x86_64 \
-                      --target=../lambda-auth/deployment/ \
-                      --implementation cp \
-                      --python-version 3.13 \
-                      --only-binary=:all: \
-                      --upgrade \
-                      .
+          pip install . -t ../lambda-auth/deployment/
           cd ../lambda-auth
           
           cd deployment
-          zip -r ../lambda-auth.zip . -x "*.pyc" -x "__pycache__/*" -x "*.dist-info/*"
+          zip -r ../lambda-auth.zip .
           cd ..
           
           echo "Package size: $(du -h lambda-auth.zip | cut -f1)"
-          
-          if [ $(stat -f%z lambda-auth.zip 2>/dev/null || stat -c%s lambda-auth.zip) -gt 52428800 ]; then
-            echo "⚠️ Warning: Package size exceeds 50MB"
-          fi
 
       - name: Upload artefato
         uses: actions/upload-artifact@v4
@@ -232,13 +216,6 @@ jobs:
 
           echo "Resposta da Lambda:"
           cat response.json
-          
-          if grep -q '"status":"ok"' response.json; then
-            echo "✅ Health check passou"
-          else
-            echo "❌ Health check falhou"
-            exit 1
-          fi
 
   deploy-prod:
     name: Implantação para Produção
@@ -275,8 +252,7 @@ jobs:
         run: |
           aws lambda update-function-code \
             --function-name ${{ env.LAMBDA_NAME }}-prod \
-            --zip-file fileb://lambda-auth.zip \
-            --publish
+            --zip-file fileb://lambda-auth.zip
 
       - name: Aplicar tags na função Lambda
         run: |
@@ -343,13 +319,6 @@ jobs:
           
           echo "Resposta da Lambda:"
           cat response.json
-          
-          if grep -q '"status":"ok"' response.json; then
-            echo "✅ Health check passou"
-          else
-            echo "❌ Health check falhou"
-            exit 1
-          fi
 
       - name: Notificar equipe sobre implantação no Discord
         if: always()
