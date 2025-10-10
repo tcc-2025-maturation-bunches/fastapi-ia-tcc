@@ -153,7 +153,7 @@ jobs:
         run: |
           aws lambda tag-resource \
             --resource arn:aws:lambda:${{ env.AWS_REGION }}:$(aws sts get-caller-identity --query Account --output text):function:${{ env.LAMBDA_NAME }}-hom \
-            --tags environment=${{ env.TAG_ENVIRONMENT }},project=${{ env.TAG_PROJECT }},group=${{ env.TAG_GROUP }},branch=${{ github.head_ref }},deployed_by=github-actions,deployment_date=$(date +%Y-%m-%d)
+            --tags environment=${{ env.TAG_ENVIRONMENT }},project=${{ env.TAG_PROJECT }},group=${{ env.TAG_GROUP }},owner=${{ env.TAG_OWNER }},creator=${{ env.TAG_CREATOR }},branch=${{ github.head_ref }},deployed_by=github-actions,deployment_date=$(date +%Y-%m-%d)
 
       - name: Aguardar atualização do Lambda
         run: |
