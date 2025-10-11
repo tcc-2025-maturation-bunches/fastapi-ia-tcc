@@ -14,6 +14,10 @@ class Settings:
         self.JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
         self.ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
+        self.CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
+        self.CORS_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+        self.CORS_HEADERS = ["*"]
+
         self.SERVICE_NAME = "auth-lambda"
         self.SERVICE_VERSION = "1.0.0"
 
