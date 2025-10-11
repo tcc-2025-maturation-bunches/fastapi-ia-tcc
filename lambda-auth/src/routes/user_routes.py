@@ -20,7 +20,6 @@ def get_user_service() -> UserService:
     response_model=UserResponse,
     summary="Obter usuário por ID",
     description="Recuperar detalhes do usuário pelo ID do usuário",
-    tags=["Usuários"],
 )
 async def get_user(user_id: str, user_service: UserService = Depends(get_user_service)):
     """
@@ -59,7 +58,6 @@ async def get_user(user_id: str, user_service: UserService = Depends(get_user_se
     response_model=UserResponse,
     summary="Criar novo usuário",
     description="Criar um novo usuário com os detalhes fornecidos",
-    tags=["Usuários"],
     status_code=status.HTTP_201_CREATED,
 )
 async def create_user(user_data: UserCreate, user_service: UserService = Depends(get_user_service)):
@@ -111,7 +109,6 @@ async def create_user(user_data: UserCreate, user_service: UserService = Depends
     response_model=UserResponse,
     summary="Atualizar usuário",
     description="Atualizar detalhes do usuário pelo ID do usuário",
-    tags=["Usuários"],
 )
 async def update_user(user_id: str, user_update: UserUpdate, user_service: UserService = Depends(get_user_service)):
     """
@@ -164,7 +161,6 @@ async def update_user(user_id: str, user_update: UserUpdate, user_service: UserS
     "/{user_id}",
     summary="Excluir usuário",
     description="Excluir usuário pelo ID do usuário",
-    tags=["Usuários"],
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_user(user_id: str, user_service: UserService = Depends(get_user_service)):
