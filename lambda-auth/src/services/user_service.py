@@ -1,8 +1,3 @@
-"""
-User Service - Auth Lambda
-Serviço responsável por gerenciamento de usuários
-"""
-
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -15,7 +10,6 @@ from src.repository.dynamo_repository import DynamoRepository
 
 logger = logging.getLogger(__name__)
 
-# Contexto para hash de senhas usando Argon2
 pwd_context = PasswordHash.recommended()
 
 
@@ -24,36 +18,10 @@ class UserService:
         self.repository = repository or DynamoRepository()
 
     def get_password_hash(self, password: str) -> str:
-        """
-        Gera um hash da senha usando Argon2
-
-        Args:
-            password: Senha em texto plano
-
-        Returns:
-            Hash da senha
-        """
         return pwd_context.hash(password)
 
     async def create_user(self, username: str, password: str, name: str, email: str, user_type: str = "user") -> User:
-        """
-        Cria um novo usuário no sistema
-
-        Args:
-            username: Nome de usuário
-            password: Senha em texto plano
-            name: Nome completo
-            email: E-mail do usuário
-            user_type: Tipo de usuário (admin ou user)
-
-        Returns:
-            Entidade User criada
-
-        Raises:
-            Exception: Se o usuário já existe ou erro ao criar
-        """
         try:
-            # Verifica se usuário já existe
             existing_user = await self.repository.get_user_by_username(username)
             if existing_user:
                 logger.warning(f"Tentativa de criar usuário duplicado: {username}")
@@ -96,15 +64,6 @@ class UserService:
             raise
 
     async def get_user_by_id(self, user_id: str) -> Optional[User]:
-        """
-        Busca um usuário pelo ID
-
-        Args:
-            user_id: ID do usuário
-
-        Returns:
-            Entidade User se encontrado, None caso contrário
-        """
         try:
             user_data = await self.repository.get_user_by_id(user_id)
 
@@ -118,15 +77,6 @@ class UserService:
             raise
 
     async def get_user_by_username(self, username: str) -> Optional[User]:
-        """
-        Busca um usuário pelo username
-
-        Args:
-            username: Nome de usuário
-
-        Returns:
-            Entidade User se encontrado, None caso contrário
-        """
         try:
             user_data = await self.repository.get_user_by_username(username)
 
@@ -147,26 +97,12 @@ class UserService:
         password: Optional[str] = None,
         user_type: Optional[str] = None,
     ) -> User:
-        """
-        Atualiza dados de um usuário
-
-        Args:
-            user_id: ID do usuário
-            name: Novo nome (opcional)
-            email: Novo e-mail (opcional)
-            password: Nova senha em texto plano (opcional)
-            user_type: Novo tipo de usuário (opcional)
-
-        Returns:
-            Entidade User atualizada
-
-        Raises:
-            Exception: Se o usuário não existe ou erro ao atualizar
-        """
         try:
-            existing_user = await self.repository.get_user_by_id(user_id)
-            if not existing_user:
+            existing_user_data = await self.repository.get_user_by_id(user_id)
+            if not existing_user_data:
                 raise ValueError(f"Usuário com ID '{user_id}' não encontrado")
+
+            username = existing_user_data.get("username")
 
             update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
 
@@ -179,11 +115,10 @@ class UserService:
             if user_type:
                 update_data["user_type"] = user_type
 
-            await self.repository.update_user(user_id, update_data)
+            await self.repository.update_user(username, update_data)
 
             logger.info(f"Usuário atualizado com sucesso: {user_id}")
 
-            # Busca usuário atualizado
             updated_user = await self.get_user_by_id(user_id)
             return updated_user
 
@@ -194,21 +129,13 @@ class UserService:
             raise
 
     async def delete_user(self, user_id: str) -> None:
-        """
-        Remove um usuário do sistema
-
-        Args:
-            user_id: ID do usuário
-
-        Raises:
-            Exception: Se o usuário não existe ou erro ao deletar
-        """
         try:
-            existing_user = await self.repository.get_user_by_id(user_id)
-            if not existing_user:
+            existing_user_data = await self.repository.get_user_by_id(user_id)
+            if not existing_user_data:
                 raise ValueError(f"Usuário com ID '{user_id}' não encontrado")
 
-            await self.repository.delete_user(user_id)
+            username = existing_user_data.get("username")
+            await self.repository.delete_user(username)
 
             logger.info(f"Usuário deletado com sucesso: {user_id}")
 

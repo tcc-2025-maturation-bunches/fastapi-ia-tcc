@@ -8,7 +8,6 @@ from src.app.config import settings
 logger = logging.getLogger(__name__)
 
 
-# Repository para interações com DynamoDB relacionadas a usuários
 class DynamoRepository:
     def __init__(self, dynamo_client: Optional[DynamoClient] = None):
         self.dynamo_client = dynamo_client or DynamoClient(table_name=settings.DYNAMODB_TABLE_NAME)
@@ -34,7 +33,9 @@ class DynamoRepository:
 
     async def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         try:
-            items = await self.dynamo_client.query_items(key_name="user_id", key_value=user_id)
+            items = await self.dynamo_client.query_items(
+                key_name="user_id", key_value=user_id, index_name="user_id-index"
+            )
             if not items:
                 logger.info(f"Usuário não encontrado: {user_id}")
                 return None
@@ -43,9 +44,9 @@ class DynamoRepository:
             logger.exception(f"Erro ao buscar usuário por id: {e}")
             raise
 
-    async def update_user(self, user_id: str, update_data: Dict[str, Any]) -> None:
+    async def update_user(self, username: str, update_data: Dict[str, Any]) -> None:
         try:
-            key = {"user_id": user_id}
+            key = {"username": username}
             update_expressions = []
             expression_values = {}
             expression_names = {}
@@ -60,16 +61,16 @@ class DynamoRepository:
                 expression_values=expression_values,
                 expression_names=expression_names if expression_names else None,
             )
-            logger.info(f"Usuário atualizado: {user_id}")
+            logger.info(f"Usuário atualizado: {username}")
         except Exception as e:
             logger.exception(f"Erro ao atualizar usuário: {e}")
             raise
 
-    async def delete_user(self, user_id: str) -> None:
+    async def delete_user(self, username: str) -> None:
         try:
-            key = {"user_id": user_id}
+            key = {"username": username}
             await self.dynamo_client.delete_item(key)
-            logger.info(f"Usuário deletado: {user_id}")
+            logger.info(f"Usuário deletado: {username}")
         except Exception as e:
             logger.exception(f"Erro ao deletar usuário: {e}")
             raise
