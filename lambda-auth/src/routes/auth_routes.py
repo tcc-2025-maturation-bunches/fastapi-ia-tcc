@@ -20,7 +20,6 @@ def get_auth_service() -> AuthService:
     response_model=AuthResponse,
     summary="Login do usuário",
     description="Autenticar usuário e emitir token JWT com dados do usuário",
-    tags=["Auth"],
     status_code=status.HTTP_200_OK,
 )
 async def login(login_req: LoginRequest, auth_service: AuthService = Depends(get_auth_service)):
@@ -44,7 +43,6 @@ async def login(login_req: LoginRequest, auth_service: AuthService = Depends(get
     "/verify",
     summary="Verificar token JWT",
     description="Verificar a validade do token JWT",
-    tags=["Auth"],
     status_code=status.HTTP_200_OK,
 )
 async def verify_token(
@@ -94,7 +92,6 @@ async def verify_token(
     "/me",
     summary="Obter dados do usuário autenticado",
     description="Retorna dados atualizados do usuário baseado no token",
-    tags=["Auth"],
     status_code=status.HTTP_200_OK,
 )
 async def get_current_user(
