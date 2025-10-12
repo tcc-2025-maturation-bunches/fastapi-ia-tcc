@@ -24,10 +24,7 @@ def retry_on_failure(
 
             for attempt in range(max_attempts):
                 try:
-                    if asyncio.iscoroutinefunction(func):
-                        return await func(*args, **kwargs)
-                    else:
-                        return func(*args, **kwargs)
+                    return await func(*args, **kwargs)
 
                 except exceptions as e:
                     last_exception = e
@@ -49,14 +46,7 @@ def retry_on_failure(
 
             raise last_exception
 
-        @wraps(func)
-        def sync_wrapper(*args, **kwargs) -> Any:
-            return asyncio.run(async_wrapper(*args, **kwargs))
-
-        if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        else:
-            return sync_wrapper
+        return async_wrapper
 
     return decorator
 
