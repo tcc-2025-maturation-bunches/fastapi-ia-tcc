@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from typing import Any, Dict
 
@@ -6,7 +5,6 @@ from src.processor.repository.dynamo_repository import DynamoRepository
 from src.processor.repository.ia_repository import IARepository
 from src.processor.usecase.combined_processing_usecase import CombinedProcessingUseCase
 from src.processor.utils.error_handler import ErrorHandler, ProcessingError
-from src.processor.utils.retry_handler import retry_on_failure
 
 logger = logging.getLogger(__name__)
 
@@ -19,19 +17,7 @@ class ProcessingService:
             ia_repository=self.ia_repository, dynamo_repository=self.dynamo_repository
         )
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            is_healthy = loop.run_until_complete(self.ia_repository.health_check())
-            if not is_healthy:
-                logger.warning("Serviço de IA não está saudável, mas continuando inicialização")
-        except Exception as e:
-            logger.error(f"Falha ao verificar health do serviço de IA: {e}")
-        finally:
-            loop.close()
-
-    @retry_on_failure(max_attempts=3, delay_seconds=5)
-    def process_message(self, message: Dict[str, Any]) -> Dict[str, Any]:
+    async def process_message(self, message: Dict[str, Any]) -> Dict[str, Any]:
         try:
             request_id = message.get("request_id")
             image_url = message.get("image_url")
@@ -44,35 +30,26 @@ class ProcessingService:
 
             logger.info(f"Processando mensagem para request_id: {request_id}")
 
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            result = await self.combined_usecase.execute_processing(
+                request_id=request_id,
+                image_url=image_url,
+                user_id=user_id,
+                result_upload_url=result_upload_url,
+                metadata=metadata,
+                maturation_threshold=maturation_threshold,
+            )
 
-            try:
-                result = loop.run_until_complete(
-                    self.combined_usecase.execute_processing(
-                        request_id=request_id,
-                        image_url=image_url,
-                        user_id=user_id,
-                        result_upload_url=result_upload_url,
-                        metadata=metadata,
-                        maturation_threshold=maturation_threshold,
-                    )
-                )
-
-                logger.info(f"Processamento concluído com sucesso para request_id: {request_id}")
-                return {
-                    "status": "success",
-                    "request_id": request_id,
-                    "result": {
-                        "status": result.status,
-                        "request_id": result.request_id,
-                        "processing_time_ms": result.processing_time_ms,
-                        "image_result_url": result.image_result_url,
-                    },
-                }
-
-            finally:
-                loop.close()
+            logger.info(f"Processamento concluído com sucesso para request_id: {request_id}")
+            return {
+                "status": "success",
+                "request_id": request_id,
+                "result": {
+                    "status": result.status,
+                    "request_id": result.request_id,
+                    "processing_time_ms": result.processing_time_ms,
+                    "image_result_url": result.image_result_url,
+                },
+            }
 
         except ProcessingError as e:
             logger.error(f"Erro de processamento para request_id {message.get('request_id')}: {e}")

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -79,7 +80,7 @@ def lambda_handler(event, context):
                     logger.info(f"Processando mensagem SQS: {message_id}")
                     message_body = json.loads(record["body"])
 
-                    result = processing_service.process_message(message_body)
+                    result = asyncio.run(processing_service.process_message(message_body))
                     results.append(result)
 
                     logger.info(f"Mensagem {message_id} processada com sucesso")

@@ -23,7 +23,7 @@ class DynamoRepository:
 
     async def update_processing_status(self, request_id: str, status_data: Dict[str, Any]) -> None:
         try:
-            key = {"pk": f"PROCESSING#{request_id}", "sk": "STATUS"}
+            key = {"pk": f"STATUS#{request_id}", "sk": "INFO"}
 
             update_expressions = []
             expression_values = {}
@@ -54,7 +54,7 @@ class DynamoRepository:
 
     async def get_processing_status(self, request_id: str) -> Dict[str, Any]:
         try:
-            key = {"pk": f"PROCESSING#{request_id}", "sk": "STATUS"}
+            key = {"pk": f"STATUS#{request_id}", "sk": "INFO"}
             return await self.dynamo_client.get_item(key)
         except Exception as e:
             logger.exception(f"Erro ao recuperar status de processamento: {e}")
