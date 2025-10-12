@@ -52,6 +52,42 @@ async def get_user(user_id: str, user_service: UserService = Depends(get_user_se
         updated_at=user.updated_at,
     )
 
+@user_router.get(
+    "/by-username/{username}",
+    response_model=UserResponse,
+    summary="Obter usuário por nome de usuário",
+    description="Recuperar detalhes do usuário pelo nome de usuário",
+)
+async def get_user_by_username(username: str, user_service: UserService = Depends(get_user_service)):
+    """
+    Busca um usuário pelo nome de usuário.
+
+    Args:
+        username: Nome de usuário
+
+    Returns:
+        Dados do usuário
+
+    Raises:
+        HTTPException: Se o usuário não for encontrado
+    """
+    logger.info(f"Buscando usuário pelo nome de usuário: {username}")
+
+    user = await user_service.get_user_by_username(username)
+
+    if not user:
+        logger.warning(f"Usuário não encontrado: {username}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Usuário com nome de usuário '{username}' não encontrado")
+
+    return UserResponse(
+        id=user.user_id,
+        username=user.username,
+        name=user.name,
+        email=user.email,
+        user_type=user.user_type,
+        created_at=user.created_at,
+        updated_at=user.updated_at,
+    )
 
 @user_router.post(
     "/",
