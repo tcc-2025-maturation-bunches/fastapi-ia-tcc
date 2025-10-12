@@ -10,6 +10,13 @@ logger.setLevel(getattr(logging, settings.LOG_LEVEL))
 
 
 def lambda_handler(event, context):
+    logger.info("=== Lambda Processing AI Iniciada ===")
+    logger.info(f"Versão: {settings.SERVICE_VERSION}")
+    logger.info(f"Ambiente: {settings.ENVIRONMENT}")
+    logger.info(f"Região: {settings.AWS_REGION}")
+    logger.info(f"EC2 IA Endpoint: {settings.EC2_IA_ENDPOINT}")
+    logger.info(f"DynamoDB Table: {settings.DYNAMODB_TABLE_NAME}")
+
     event_str = json.dumps(event, default=str)
     if len(event_str) > 1000:
         logger.info(f"Lambda invocado - Evento (truncado): {event_str[:1000]}...")
@@ -34,7 +41,34 @@ def lambda_handler(event, context):
                 ),
             }
 
-        processing_service = ProcessingService()
+        try:
+            processing_service = ProcessingService()
+            logger.info("ProcessingService inicializado com sucesso")
+        except ValueError as e:
+            logger.error(f"Erro de configuração ao inicializar ProcessingService: {e}")
+            return {
+                "statusCode": 500,
+                "body": json.dumps(
+                    {
+                        "error": "Configuração inválida",
+                        "message": str(e),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                ),
+            }
+        except Exception as e:
+            logger.exception(f"Erro inesperado ao inicializar ProcessingService: {e}")
+            return {
+                "statusCode": 500,
+                "body": json.dumps(
+                    {
+                        "error": "Erro ao inicializar serviço",
+                        "message": str(e),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                ),
+            }
+
         results = []
         failed_messages = []
 
@@ -73,10 +107,10 @@ def lambda_handler(event, context):
         success_count = len(results)
         failed_count = len(failed_messages)
 
-        logger.info(f"Processamento concluído - " f"Sucesso: {success_count}, Falhas: {failed_count}")
+        logger.info(f"Processamento concluído - Sucesso: {success_count}, Falhas: {failed_count}")
 
         return {
-            "statusCode": 200 if failed_count == 0 else 207,  # 207 Multi-Status se houver falhas
+            "statusCode": 200 if failed_count == 0 else 207,
             "body": json.dumps(
                 {
                     "message": "Processamento concluído",

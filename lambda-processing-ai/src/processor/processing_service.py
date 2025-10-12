@@ -19,6 +19,17 @@ class ProcessingService:
             ia_repository=self.ia_repository, dynamo_repository=self.dynamo_repository
         )
 
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            is_healthy = loop.run_until_complete(self.ia_repository.health_check())
+            if not is_healthy:
+                logger.warning("Serviço de IA não está saudável, mas continuando inicialização")
+        except Exception as e:
+            logger.error(f"Falha ao verificar health do serviço de IA: {e}")
+        finally:
+            loop.close()
+
     @retry_on_failure(max_attempts=3, delay_seconds=5)
     def process_message(self, message: Dict[str, Any]) -> Dict[str, Any]:
         try:

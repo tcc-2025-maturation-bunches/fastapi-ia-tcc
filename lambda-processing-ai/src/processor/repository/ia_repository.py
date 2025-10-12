@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import List, Optional
 
 from fruit_detection_shared.domain.entities import CombinedResult, Image
 from fruit_detection_shared.domain.models import (
@@ -10,12 +10,77 @@ from fruit_detection_shared.domain.models import (
 )
 from fruit_detection_shared.infra.external import EC2Client
 
+from src.app.config import settings
+
 logger = logging.getLogger(__name__)
+
+
+class ModelInfo:
+    def __init__(self, name: str, version: str, description: str):
+        self.name = name
+        self.version = version
+        self.description = description
+
+
+class HealthCheckResponse:
+    def __init__(self, status: str, models: List[ModelInfo]):
+        self.status = status
+        self.models = models
+
+    @property
+    def is_healthy(self) -> bool:
+        return self.status == "healthy"
 
 
 class IARepository:
     def __init__(self, ec2_client: Optional[EC2Client] = None):
-        self.ec2_client = ec2_client or EC2Client()
+        self.ec2_client = ec2_client or EC2Client(base_url=settings.EC2_IA_ENDPOINT, timeout=settings.REQUEST_TIMEOUT)
+
+    async def health_check(self) -> bool:
+        try:
+            health_response = await self._check_health()
+
+            if health_response and health_response.is_healthy:
+                model_names = [model.name for model in health_response.models]
+                logger.info(f"Serviço de IA saudável. Modelos: {', '.join(model_names)}")
+                return True
+            else:
+                logger.warning("Serviço de IA não está saudável")
+                return False
+
+        except Exception as e:
+            logger.error(f"Erro ao verificar health do serviço de IA: {e}")
+            return False
+
+    async def _check_health(self) -> Optional[HealthCheckResponse]:
+        try:
+            import aiohttp
+
+            health_url = f"{self.ec2_client.base_url}/health"
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(health_url, timeout=10) as response:
+                    if response.status == 200:
+                        data = await response.json()
+
+                        models = []
+                        for model_data in data.get("models", []):
+                            models.append(
+                                ModelInfo(
+                                    name=model_data.get("name", "unknown"),
+                                    version=model_data.get("version", "unknown"),
+                                    description=model_data.get("description", ""),
+                                )
+                            )
+
+                        return HealthCheckResponse(status=data.get("status", "unknown"), models=models)
+                    else:
+                        logger.error(f"Health check retornou status {response.status}")
+                        return None
+
+        except Exception as e:
+            logger.error(f"Falha ao conectar ao endpoint de health: {e}")
+            return None
 
     async def process_combined(
         self, image: Image, result_upload_url: Optional[str], maturation_threshold: float = 0.6
