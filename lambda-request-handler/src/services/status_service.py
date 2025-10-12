@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -22,6 +23,16 @@ class ProcessingStatus(Enum):
     COMPLETED = "completed"
     ERROR = "error"
     TIMEOUT = "timeout"
+
+
+def convert_floats_to_decimal(obj):
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    elif isinstance(obj, dict):
+        return {k: convert_floats_to_decimal(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_floats_to_decimal(item) for item in obj]
+    return obj
 
 
 class StatusService:
@@ -52,9 +63,9 @@ class StatusService:
                 "request_id": request_id,
                 "user_id": user_id,
                 "status": ProcessingStatus.QUEUED.value,
-                "progress": 0.0,
+                "progress": Decimal("0.0"),
                 "image_url": image_url,
-                "metadata": metadata,
+                "metadata": convert_floats_to_decimal(metadata),
                 "created_at": now.isoformat(),
                 "updated_at": now.isoformat(),
                 "ttl": ttl,
@@ -86,6 +97,9 @@ class StatusService:
             item["elapsed_seconds"] = elapsed_seconds
             item["is_timeout"] = elapsed_seconds > settings.PROCESSING_TIMEOUT_SECONDS
 
+            if isinstance(item.get("progress"), Decimal):
+                item["progress"] = float(item["progress"])
+
             return item
 
         except ClientError as e:
@@ -106,9 +120,10 @@ class StatusService:
 
             if progress is not None:
                 update_expression += ", progress = :progress"
-                expression_values[":progress"] = progress
+                expression_values[":progress"] = Decimal(str(progress))
 
             if additional_data:
+                additional_data = convert_floats_to_decimal(additional_data)
                 for key, value in additional_data.items():
                     safe_key = f"#{key}"
                     update_expression += f", {safe_key} = :{key}"
@@ -165,6 +180,10 @@ class StatusService:
             items = response.get("Items", [])
 
             status_items = [item for item in items if item.get("entity_type") == "PROCESSING_STATUS"]
+
+            for item in status_items:
+                if isinstance(item.get("progress"), Decimal):
+                    item["progress"] = float(item["progress"])
 
             return status_items
 
