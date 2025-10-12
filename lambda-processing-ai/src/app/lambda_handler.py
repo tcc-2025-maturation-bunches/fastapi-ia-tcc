@@ -26,10 +26,12 @@ def lambda_handler(event, context):
             logger.warning("Nenhuma mensagem SQS encontrada no evento")
             return {
                 "statusCode": 200,
-                "body": json.dumps({
-                    "message": "Nenhuma mensagem para processar",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }),
+                "body": json.dumps(
+                    {
+                        "message": "Nenhuma mensagem para processar",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                ),
             }
 
         processing_service = ProcessingService()
@@ -42,35 +44,36 @@ def lambda_handler(event, context):
                 try:
                     logger.info(f"Processando mensagem SQS: {message_id}")
                     message_body = json.loads(record["body"])
-                    
+
                     result = processing_service.process_message(message_body)
                     results.append(result)
-                    
+
                     logger.info(f"Mensagem {message_id} processada com sucesso")
-                    
+
                 except json.JSONDecodeError as e:
                     logger.error(f"Erro ao decodificar JSON da mensagem {message_id}: {e}")
-                    failed_messages.append({
-                        "message_id": message_id,
-                        "error": "Invalid JSON",
-                        "details": str(e),
-                    })
-                    
+                    failed_messages.append(
+                        {
+                            "message_id": message_id,
+                            "error": "Invalid JSON",
+                            "details": str(e),
+                        }
+                    )
+
                 except Exception as e:
                     logger.exception(f"Erro ao processar mensagem {message_id}: {e}")
-                    failed_messages.append({
-                        "message_id": message_id,
-                        "error": str(e),
-                        "request_id": message_body.get("request_id") if 'message_body' in locals() else None,
-                    })
+                    failed_messages.append(
+                        {
+                            "message_id": message_id,
+                            "error": str(e),
+                            "request_id": message_body.get("request_id") if "message_body" in locals() else None,
+                        }
+                    )
 
         success_count = len(results)
         failed_count = len(failed_messages)
-        
-        logger.info(
-            f"Processamento concluído - "
-            f"Sucesso: {success_count}, Falhas: {failed_count}"
-        )
+
+        logger.info(f"Processamento concluído - " f"Sucesso: {success_count}, Falhas: {failed_count}")
 
         return {
             "statusCode": 200 if failed_count == 0 else 207,  # 207 Multi-Status se houver falhas
