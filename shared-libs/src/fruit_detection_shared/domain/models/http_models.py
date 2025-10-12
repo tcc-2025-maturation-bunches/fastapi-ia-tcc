@@ -1,8 +1,7 @@
-# fruit_detection_shared/shared/domain/models/http_models.py
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 from fruit_detection_shared.domain.enums.ia_model_type_enum import ModelType
 from fruit_detection_shared.domain.models.base_models import (
@@ -71,6 +70,8 @@ __all__ = [
 
 
 class ProcessImageRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     image_url: HttpUrl
     user_id: str
     model_type: ModelType
@@ -78,6 +79,8 @@ class ProcessImageRequest(BaseModel):
 
 
 class ProcessingResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     request_id: str
     image_id: str
     model_type: str
@@ -103,7 +106,7 @@ class PresignedUrlResponse(BaseModel):
 
 class ProcessingStatusResponse(BaseModel):
     request_id: str
-    status: str  # "queued", "processing", "detecting", "detecting_maturation", "completed", "error"
+    status: str
     progress: Optional[float] = Field(None, ge=0.0, le=1.0)
     estimated_completion_time: Optional[datetime] = None
     error_message: Optional[str] = None
