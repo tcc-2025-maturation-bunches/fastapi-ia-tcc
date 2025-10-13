@@ -35,18 +35,32 @@ class DynamoRepository:
 
     async def get_results_by_image_id(self, image_id: str) -> List[Dict[str, Any]]:
         try:
-            items = await self.dynamo_client.scan(
-                filter_expression="entity_type = :entity_type AND image_id = :image_id",
-                expression_values={":entity_type": "COMBINED_RESULT", ":image_id": image_id},
+            items = await self.dynamo_client.query_items(
+                key_name="image_id",
+                key_value=image_id,
+                index_name="ImageIdIndex",
+                scan_index_forward=False,
             )
 
-            results = [self._format_result_item(item) for item in items]
+            combined_results = [item for item in items if item.get("entity_type") == "COMBINED_RESULT"]
+            results = [self._format_result_item(item) for item in combined_results]
+
             logger.info(f"Encontrados {len(results)} resultados para image_id: {image_id}")
             return results
 
         except Exception as e:
-            logger.exception(f"Erro ao buscar resultados por image_id: {e}")
-            raise
+            logger.warning(f"ImageIdIndex pode não existir, tentando scan. Erro: {e}")
+            try:
+                items = await self.dynamo_client.scan(
+                    filter_expression="entity_type = :entity_type AND image_id = :image_id",
+                    expression_values={":entity_type": "COMBINED_RESULT", ":image_id": image_id},
+                )
+                results = [self._format_result_item(item) for item in items]
+                logger.info(f"Encontrados {len(results)} resultados para image_id via scan: {image_id}")
+                return results
+            except Exception as scan_error:
+                logger.exception(f"Erro ao buscar resultados por image_id via scan: {scan_error}")
+                raise
 
     async def get_results_by_user_id(self, user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
         try:
@@ -66,8 +80,12 @@ class DynamoRepository:
 
     async def get_results_by_device_id(self, device_id: str, limit: int = 20) -> List[Dict[str, Any]]:
         try:
+            filter_expr = (
+                "entity_type = :entity_type AND "
+                "(initial_metadata.device_id = :device_id OR additional_metadata.device_id = :device_id)"
+            )
             items = await self.dynamo_client.scan(
-                filter_expression="entity_type = :entity_type AND initial_metadata.device_id = :device_id",
+                filter_expression=filter_expr,
                 expression_values={":entity_type": "COMBINED_RESULT", ":device_id": device_id},
                 limit=limit,
             )
@@ -172,7 +190,9 @@ class DynamoRepository:
                 expression_values[":end_date"] = end_date.isoformat()
 
             if device_id:
-                filter_expressions.append("initial_metadata.device_id = :device_id")
+                filter_expressions.append(
+                    "(initial_metadata.device_id = :device_id OR additional_metadata.device_id = :device_id)"
+                )
                 expression_values[":device_id"] = device_id
 
             expression_names = {}
