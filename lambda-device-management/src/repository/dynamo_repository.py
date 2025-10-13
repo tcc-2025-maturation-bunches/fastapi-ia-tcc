@@ -33,16 +33,15 @@ class DynamoRepository:
 
     async def get_device_by_id(self, device_id: str) -> Optional[Device]:
         try:
-            query_result = await self.dynamo_client.query_with_pagination(
-                key_name="pk", key_value=f"DEVICE#{device_id}", limit=1
-            )
+            key = {"pk": f"DEVICE#{device_id}", "sk": f"INFO#{device_id}"}
 
-            items = query_result.get("items", [])
-            if not items:
+            item = await self.dynamo_client.get_item(key)
+
+            if not item:
                 logger.debug(f"Dispositivo {device_id} não encontrado")
                 return None
 
-            return Device.from_dict(items[0])
+            return Device.from_dict(item)
 
         except Exception as e:
             logger.exception(f"Erro ao obter dispositivo {device_id}: {e}")
@@ -89,15 +88,8 @@ class DynamoRepository:
 
     async def delete_device(self, device_id: str) -> bool:
         try:
-            device = await self.get_device_by_id(device_id)
-            if not device:
-                return False
+            key = {"pk": f"DEVICE#{device_id}", "sk": f"INFO#{device_id}"}
 
-            last_seen_str = (
-                device.last_seen.strftime("%Y-%m-%d#%H:%M:%S") if device.last_seen else "1970-01-01#00:00:00"
-            )
-            sk = f"STATUS#{device.status}#LASTSEEN#{last_seen_str}"
-            key = {"pk": f"DEVICE#{device_id}", "sk": sk}
             success = await self.dynamo_client.delete_item(key)
 
             if success:
@@ -116,8 +108,8 @@ class DynamoRepository:
                 key_value="DEVICE",
                 index_name="EntityTypeIndex",
                 limit=limit,
-                filter_expression="begins_with(sk, :sk_prefix)",
-                expression_values={":sk_prefix": f"STATUS#{status}#"},
+                filter_expression="status = :status",
+                expression_values={":status": status},
                 scan_index_forward=False,
             )
 
@@ -132,10 +124,6 @@ class DynamoRepository:
 
             logger.debug(f"Encontrados {len(devices)} dispositivos com status {status}")
             return devices
-
-        except Exception as e:
-            logger.exception(f"Erro ao obter dispositivos por status {status}: {e}")
-            raise
 
         except Exception as e:
             logger.exception(f"Erro ao obter dispositivos por status {status}: {e}")
@@ -174,17 +162,10 @@ class DynamoRepository:
                 logger.warning(f"Dispositivo {device_id} não encontrado para atualização")
                 return False
 
-            last_seen_str = (
-                device.last_seen.strftime("%Y-%m-%d#%H:%M:%S") if device.last_seen else "1970-01-01#00:00:00"
-            )
-            old_sk = f"STATUS#{device.status}#LASTSEEN#{last_seen_str}"
-            old_key = {"pk": f"DEVICE#{device_id}", "sk": old_sk}
-
             device.status = status
             device.last_seen = datetime.now(timezone.utc)
             device.updated_at = datetime.now(timezone.utc)
 
-            await self.dynamo_client.delete_item(old_key)
             await self.save_device(device)
 
             logger.debug(f"Status do dispositivo {device_id} atualizado para {status}")
@@ -252,7 +233,10 @@ class DynamoRepository:
             offline_devices = []
             for device in online_devices:
                 if device.last_seen:
-                    last_seen = datetime.fromisoformat(device.last_seen.replace("Z", "+00:00"))
+                    last_seen = device.last_seen
+                    if isinstance(last_seen, str):
+                        last_seen = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+
                     if last_seen.timestamp() < cutoff_time:
                         offline_devices.append(device)
 
