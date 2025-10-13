@@ -22,7 +22,7 @@ class Device:
         self.device_name = device_name
         self.location = location
         self.capabilities = capabilities or {}
-        self.status = status  # pending, online, offline, maintenance, error
+        self.status = status
         self.created_at = created_at or datetime.now(timezone.utc)
         self.updated_at = updated_at or datetime.now(timezone.utc)
         self.last_seen = last_seen or datetime.now(timezone.utc)
@@ -88,11 +88,9 @@ class Device:
         self.updated_at = datetime.now(timezone.utc)
 
     def to_dict(self) -> Dict[str, Any]:
-        last_seen_str = self.last_seen.strftime("%Y-%m-%d#%H:%M:%S") if self.last_seen else "2025-01-01#00:00:00"
-        sk = f"STATUS#{self.status}#LASTSEEN#{last_seen_str}"
         return {
             "pk": f"DEVICE#{self.device_id}",
-            "sk": sk,
+            "sk": f"INFO#{self.device_id}",
             "entity_type": "DEVICE",
             "device_id": self.device_id,
             "device_name": self.device_name,
