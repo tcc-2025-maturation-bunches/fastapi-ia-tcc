@@ -51,12 +51,14 @@ class ModelVersions(BaseModel):
 
     detection: str = "unknown"
     maturation: str = "unknown"
+    segmentation: str = "unknown"
 
     def __init__(self, **data):
         if isinstance(data.get("detection"), dict):
             super().__init__(
                 detection=data["detection"].get("detection", "unknown"),
                 maturation=data["detection"].get("maturation", "unknown"),
+                segmentation=data["detection"].get("segmentation", "unknown"),
             )
         else:
             super().__init__(**data)
@@ -85,7 +87,9 @@ class ImageDimensions(BaseModel):
 
 class MaturationDistribution(BaseModel):
     verde: int = 0
+    quase_madura: int = 0
     madura: int = 0
+    muito_madura: int = 0
     passada: int = 0
     nao_analisado: int = 0
 
