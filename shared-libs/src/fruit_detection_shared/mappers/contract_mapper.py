@@ -82,7 +82,9 @@ class ContractResponseMapper:
         if processing_metadata is None:
             processing_metadata = ProcessingMetadata(
                 image_dimensions=ImageDimensions(width=0, height=0),
-                maturation_distribution=MaturationDistribution(verde=0, madura=0, passada=0, nao_analisado=0),
+                maturation_distribution=MaturationDistribution(
+                    verde=0, quase_madura=0, madura=0, muito_madura=0, passada=0, nao_analisado=0
+                ),
             )
 
         return CombinedContractResponse(

@@ -127,7 +127,11 @@ class CombinedResult:
 
             model_versions = summary_data.get("model_versions", {})
             if not isinstance(model_versions, dict):
-                model_versions = {"detection": "unknown", "maturation": "unknown"}
+                model_versions = {"detection": "unknown", "maturation": "unknown", "segmentation": "unknown"}
+            else:
+                model_versions.setdefault("detection", "unknown")
+                model_versions.setdefault("maturation", "unknown")
+                model_versions.setdefault("segmentation", "unknown")
 
             summary = ContractDetectionSummary(
                 total_objects=safe_int(summary_data.get("total_objects")),
@@ -181,13 +185,22 @@ class CombinedResult:
 
             maturation_dist = processing_metadata_data.get("maturation_distribution", {})
             if maturation_dist:
-                maturation_dist = {k: int(v) if isinstance(v, str) else v for k, v in maturation_dist.items()}
+                maturation_dist_normalized = {
+                    "verde": int(maturation_dist.get("verde", 0)),
+                    "quase_madura": int(maturation_dist.get("quase_madura", 0)),
+                    "madura": int(maturation_dist.get("madura", 0)),
+                    "muito_madura": int(maturation_dist.get("muito_madura", 0)),
+                    "passada": int(maturation_dist.get("passada", 0)),
+                    "nao_analisado": int(maturation_dist.get("nao_analisado", 0)),
+                }
 
             from fruit_detection_shared.domain.models.base_models import ImageDimensions, MaturationDistribution
 
             processing_metadata = ProcessingMetadata(
                 image_dimensions=ImageDimensions(**image_dimensions) if image_dimensions else None,
-                maturation_distribution=MaturationDistribution(**maturation_dist) if maturation_dist else None,
+                maturation_distribution=(
+                    MaturationDistribution(**maturation_dist_normalized) if maturation_dist else None
+                ),
             )
 
         processing_time_ms = data.get("processing_time_ms", 0)
