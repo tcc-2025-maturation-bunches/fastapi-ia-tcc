@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fruit_detection_shared.domain.models import CombinedContractResponse
+from pydantic import BaseModel
 
 from src.app.config import settings
 from src.services.results_service import ResultsService
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 results_router = APIRouter()
 
 
-class PaginatedResultsResponse(CombinedContractResponse):
+class PaginatedResultsResponse(BaseModel):
     items: List[Dict[str, Any]]
     total_count: int
     has_more: bool
