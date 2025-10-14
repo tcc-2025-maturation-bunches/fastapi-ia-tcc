@@ -114,11 +114,50 @@ class IARepository:
             summary_data = response.get("detection", {}).get("summary", {})
             summary = None
             if summary_data:
-                summary = ContractDetectionSummary(**summary_data)
+                model_versions_data = summary_data.get("model_versions", {})
+
+                if isinstance(model_versions_data, dict):
+                    model_versions_normalized = {
+                        "detection": model_versions_data.get("detection", "unknown"),
+                        "maturation": model_versions_data.get("maturation", "unknown"),
+                        "segmentation": model_versions_data.get("segmentation", "unknown"),
+                    }
+                else:
+                    model_versions_normalized = {
+                        "detection": "unknown",
+                        "maturation": "unknown",
+                        "segmentation": "unknown",
+                    }
+
+                summary = ContractDetectionSummary(
+                    total_objects=summary_data.get("total_objects", 0),
+                    objects_with_maturation=summary_data.get("objects_with_maturation", 0),
+                    detection_time_ms=summary_data.get("detection_time_ms", 0),
+                    maturation_time_ms=summary_data.get("maturation_time_ms", 0),
+                    average_maturation_score=summary_data.get("average_maturation_score", 0.0),
+                    model_versions=model_versions_normalized,
+                )
 
             processing_metadata = None
             if response.get("processing_metadata"):
-                processing_metadata = ProcessingMetadata(**response["processing_metadata"])
+                metadata_data = response["processing_metadata"]
+
+                image_dims = metadata_data.get("image_dimensions", {})
+                mat_dist = metadata_data.get("maturation_distribution", {})
+
+                mat_dist_normalized = {
+                    "verde": mat_dist.get("verde", 0),
+                    "quase_madura": mat_dist.get("quase_madura", 0),
+                    "madura": mat_dist.get("madura", 0),
+                    "muito_madura": mat_dist.get("muito_madura", 0),
+                    "passada": mat_dist.get("passada", 0),
+                    "nao_analisado": mat_dist.get("nao_analisado", 0),
+                }
+
+                processing_metadata = ProcessingMetadata(
+                    image_dimensions=image_dims,
+                    maturation_distribution=mat_dist_normalized,
+                )
 
             status = response.get("status", "success")
             error_code = response.get("error_code")
