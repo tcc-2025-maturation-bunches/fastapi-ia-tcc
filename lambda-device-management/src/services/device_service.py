@@ -126,7 +126,7 @@ class DeviceService:
                 logger.warning(f"Dispositivo {device_id} não encontrado para atualização de estatísticas")
                 return False
 
-            success = processing_result.get("status") == "success"
+            success = processing_result.get("success", False)
             device.increment_capture_count(success=success)
 
             if processing_result.get("processing_time_ms"):
@@ -139,7 +139,7 @@ class DeviceService:
 
             await self.dynamo_repository.save_device(device)
 
-            logger.info(f"Estatísticas atualizadas para dispositivo {device_id}")
+            logger.info(f"Estatísticas atualizadas para dispositivo {device_id} - Success: {success}")
             return True
 
         except Exception as e:
