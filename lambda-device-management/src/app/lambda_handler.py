@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Coroutine, TypeVar
+from typing import Any, Coroutine
 
 from mangum import Mangum
 
@@ -14,24 +14,10 @@ logger.setLevel(logging.INFO)
 
 handler = Mangum(app, lifespan="auto")
 
-T = TypeVar("T")
 
-
-def get_or_create_event_loop() -> asyncio.AbstractEventLoop:
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        return loop
-
-
-def run_async(coro: Coroutine[Any, Any, T]) -> T:
-    loop = get_or_create_event_loop()
+def run_async(coro: Coroutine[Any, Any, Any]) -> Any:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     return loop.run_until_complete(coro)
 
 
