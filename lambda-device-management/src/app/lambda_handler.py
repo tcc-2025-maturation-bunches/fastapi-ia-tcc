@@ -11,7 +11,7 @@ from src.services.device_service import DeviceService
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-handler = Mangum(app, lifespan="off")
+handler = Mangum(app, lifespan="auto")
 
 
 def lambda_handler(event, context):
@@ -62,28 +62,31 @@ def handle_scheduled_event(event, context):
         logger.info("Executando verificação de dispositivos offline")
 
         device_service = DeviceService()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
 
         try:
-            offline_devices = loop.run_until_complete(device_service.check_offline_devices())
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
-            result = {
-                "status": "completed",
-                "offline_devices_count": len(offline_devices),
-                "offline_device_ids": offline_devices,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
+        offline_devices = loop.run_until_complete(device_service.check_offline_devices())
 
-            logger.info(f"Verificação de dispositivos offline concluída: {len(offline_devices)} dispositivos offline")
+        result = {
+            "status": "completed",
+            "offline_devices_count": len(offline_devices),
+            "offline_device_ids": offline_devices,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
 
-            return {
-                "statusCode": 200,
-                "body": json.dumps(result),
-            }
+        logger.info(f"Verificação de dispositivos offline concluída: {len(offline_devices)} dispositivos offline")
 
-        finally:
-            loop.close()
+        return {
+            "statusCode": 200,
+            "body": json.dumps(result),
+        }
 
     except Exception as e:
         logger.exception(f"Erro na verificação de dispositivos offline: {e}")
@@ -119,32 +122,34 @@ def handle_sns_notification(record, context):
 
         device_service = DeviceService()
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
         try:
-            success = loop.run_until_complete(device_service.update_device_statistics(device_id, processing_result))
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
-            if success:
-                logger.info(f"Estatísticas atualizadas para dispositivo {device_id} via SNS")
-            else:
-                logger.warning(f"Falha ao atualizar estatísticas para dispositivo {device_id}")
+        success = loop.run_until_complete(device_service.update_device_statistics(device_id, processing_result))
 
-            return {
-                "statusCode": 200,
-                "body": json.dumps(
-                    {
-                        "status": "processed",
-                        "device_id": device_id,
-                        "request_id": request_id,
-                        "success": success,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                ),
-            }
+        if success:
+            logger.info(f"Estatísticas atualizadas para dispositivo {device_id} via SNS")
+        else:
+            logger.warning(f"Falha ao atualizar estatísticas para dispositivo {device_id}")
 
-        finally:
-            loop.close()
+        return {
+            "statusCode": 200,
+            "body": json.dumps(
+                {
+                    "status": "processed",
+                    "device_id": device_id,
+                    "request_id": request_id,
+                    "success": success,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            ),
+        }
 
     except Exception as e:
         logger.exception(f"Erro ao processar notificação SNS: {e}")
