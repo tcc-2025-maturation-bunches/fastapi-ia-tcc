@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
+from typing import Any, Coroutine, TypeVar
 
 from mangum import Mangum
 
@@ -12,6 +13,26 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 handler = Mangum(app, lifespan="auto")
+
+T = TypeVar("T")
+
+
+def get_or_create_event_loop() -> asyncio.AbstractEventLoop:
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop
+
+
+def run_async(coro: Coroutine[Any, Any, T]) -> T:
+    loop = get_or_create_event_loop()
+    return loop.run_until_complete(coro)
 
 
 def lambda_handler(event, context):
@@ -62,17 +83,7 @@ def handle_scheduled_event(event, context):
         logger.info("Executando verificação de dispositivos offline")
 
         device_service = DeviceService()
-
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_closed():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        offline_devices = loop.run_until_complete(device_service.check_offline_devices())
+        offline_devices = run_async(device_service.check_offline_devices())
 
         result = {
             "status": "completed",
@@ -121,17 +132,7 @@ def handle_sns_notification(record, context):
             return {"statusCode": 200, "body": "Notification ignored - no device_id"}
 
         device_service = DeviceService()
-
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_closed():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        success = loop.run_until_complete(device_service.update_device_statistics(device_id, processing_result))
+        success = run_async(device_service.update_device_statistics(device_id, processing_result))
 
         if success:
             logger.info(f"Estatísticas atualizadas para dispositivo {device_id} via SNS")
