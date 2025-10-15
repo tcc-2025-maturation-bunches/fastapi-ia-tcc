@@ -16,9 +16,7 @@ handler = Mangum(app, lifespan="auto")
 
 
 def run_async(coro: Coroutine[Any, Any, Any]) -> Any:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    return loop.run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def lambda_handler(event, context):
