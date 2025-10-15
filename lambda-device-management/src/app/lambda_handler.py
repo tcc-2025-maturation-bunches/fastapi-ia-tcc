@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
+from typing import Any, Coroutine
 
 from mangum import Mangum
 
@@ -11,7 +12,11 @@ from src.services.device_service import DeviceService
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-handler = Mangum(app, lifespan="off")
+handler = Mangum(app, lifespan="auto")
+
+
+def run_async(coro: Coroutine[Any, Any, Any]) -> Any:
+    return asyncio.run(coro)
 
 
 def lambda_handler(event, context):
@@ -62,28 +67,21 @@ def handle_scheduled_event(event, context):
         logger.info("Executando verificação de dispositivos offline")
 
         device_service = DeviceService()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        offline_devices = run_async(device_service.check_offline_devices())
 
-        try:
-            offline_devices = loop.run_until_complete(device_service.check_offline_devices())
+        result = {
+            "status": "completed",
+            "offline_devices_count": len(offline_devices),
+            "offline_device_ids": offline_devices,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
 
-            result = {
-                "status": "completed",
-                "offline_devices_count": len(offline_devices),
-                "offline_device_ids": offline_devices,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
+        logger.info(f"Verificação de dispositivos offline concluída: {len(offline_devices)} dispositivos offline")
 
-            logger.info(f"Verificação de dispositivos offline concluída: {len(offline_devices)} dispositivos offline")
-
-            return {
-                "statusCode": 200,
-                "body": json.dumps(result),
-            }
-
-        finally:
-            loop.close()
+        return {
+            "statusCode": 200,
+            "body": json.dumps(result),
+        }
 
     except Exception as e:
         logger.exception(f"Erro na verificação de dispositivos offline: {e}")
@@ -118,33 +116,25 @@ def handle_sns_notification(record, context):
             return {"statusCode": 200, "body": "Notification ignored - no device_id"}
 
         device_service = DeviceService()
+        success = run_async(device_service.update_device_statistics(device_id, processing_result))
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        if success:
+            logger.info(f"Estatísticas atualizadas para dispositivo {device_id} via SNS")
+        else:
+            logger.warning(f"Falha ao atualizar estatísticas para dispositivo {device_id}")
 
-        try:
-            success = loop.run_until_complete(device_service.update_device_statistics(device_id, processing_result))
-
-            if success:
-                logger.info(f"Estatísticas atualizadas para dispositivo {device_id} via SNS")
-            else:
-                logger.warning(f"Falha ao atualizar estatísticas para dispositivo {device_id}")
-
-            return {
-                "statusCode": 200,
-                "body": json.dumps(
-                    {
-                        "status": "processed",
-                        "device_id": device_id,
-                        "request_id": request_id,
-                        "success": success,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                ),
-            }
-
-        finally:
-            loop.close()
+        return {
+            "statusCode": 200,
+            "body": json.dumps(
+                {
+                    "status": "processed",
+                    "device_id": device_id,
+                    "request_id": request_id,
+                    "success": success,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            ),
+        }
 
     except Exception as e:
         logger.exception(f"Erro ao processar notificação SNS: {e}")
