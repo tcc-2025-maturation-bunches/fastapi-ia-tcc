@@ -1,6 +1,6 @@
 # FastAPI em AWS Lambda: Projeto de IA para Detecção e Maturação de Frutas
 
-Este projeto implementa uma API FastAPI hospedada em AWS Lambda para processamento de frutas usando modelos de Inteligência Artificial. A API permite fazer upload de imagens e processá-las através de modelos de IA hospedados em instâncias EC2.
+Este projeto implementa uma arquitetura de microsserviços baseada em FastAPI e hospedada em AWS Lambda para o processamento de imagens de frutas, utilizando modelos de Inteligência Artificial para detecção de objetos e análise de maturação.
 
 ## INFORMAÇÕES SOBRE O TCC
 #### Título: Solução de Visão Computacional para controle de validade em mercados.
@@ -19,267 +19,127 @@ Este projeto implementa uma API FastAPI hospedada em AWS Lambda para processamen
 2. Sandro Martini
 3. Gabriel de Souza Lima
 
-## Arquitetura
+## Arquitetura Atual
 
-![Arquitetura](docs/images/arquitetura_1obanca.png)
+O sistema evoluiu para uma arquitetura de microsserviços serverless na AWS, visando maior escalabilidade, manutenibilidade e separação de responsabilidades. Os componentes principais são:
 
-O sistema utiliza uma arquitetura serverless na AWS com os seguintes componentes:
+1.  **Frontend**: Uma interface em React para interação do usuário e visualização dos resultados.
+2.  **API Layer (API Gateway)**: Atua como a porta de entrada para todas as requisições, roteando-as para os Lambdas apropriados.
+3.  **Microsserviços (AWS Lambda com FastAPI)**: Cada Lambda representa um serviço especializado com responsabilidades bem definidas.
+4.  **Armazenamento (S3 & DynamoDB)**: Amazon S3 é utilizado para o armazenamento de imagens (originais e processadas) e o DynamoDB para persistir metadados, status e resultados das análises.
+5.  **Inteligência Artificial (Amazon EC2)**: Os modelos de IA para detecção e maturação são hospedados em instâncias EC2, proporcionando um ambiente com maior poder de processamento.
+6.  **Comunicação Assíncrona (Amazon SQS & SNS)**: SQS gerencia as filas de processamento de imagens, garantindo que as requisições sejam processadas de forma assíncrona. SNS é usado para notificações entre serviços, como a notificação de conclusão de processamento para o gerenciamento de dispositivos.
 
-1. **Frontend** - Interface React para visualização dos resultados
-2. **API Layer** - API Gateway + endpoints REST implementados com FastAPI
-3. **Backend (Lambda)** - Lógica de negócios em FastAPI rodando como função Lambda
-4. **Armazenamento** - DynamoDB para metadados e S3 para imagens
-5. **Inteligência Artificial** - Modelos de IA rodando em EC2
+### De-Para: Evolução da Arquitetura
 
-## Funcionalidades
+A tabela abaixo compara a arquitetura da primeira entrega com a estrutura atual de microsserviços.
 
-- **Upload de Imagens**: Permite o envio de imagens diretamente para o S3 via URLs pré-assinadas
-- **Detecção de Objetos**: Identifica frutas em imagens utilizando modelos de IA
-- **Análise de Maturação**: Avalia o estágio de maturação das frutas detectadas
-- **Armazenamento de Resultados**: Persistência de imagens e metadados
-- **Visualização de Resultados**: Exibe os resultados do processamento com marcações visuais
-- **Histórico de Análises**: Mantém um registro das análises anteriores
-- **Monitoramento de Dispositivos**: Sistema completo de gerenciamento de dispositivos com camera
-- **Consultas Otimizadas**: Busca eficiente de todos os resultados e dispositivos
-
-## Back-End
-
-- **Python 3.9**: Linguagem de programação
-- **FastAPI**: Framework para APIs
-- **AWS Lambda**: Execução serverless
-- **API Gateway**: Roteamento de requisições
-- **DynamoDB**: Banco de dados NoSQL para metadados
-- **S3**: Armazenamento de objetos para imagens
-- **EC2**: Hospedagem de modelos de IA
-- **Mangum**: Adaptador para AWS Lambda
-
-## Implantação
-- **GitHub Actions**: CI/CD automatizado
-
-## Configuração do DynamoDB - Índices Secundários Globais (GSI)
-
-### ⚠️ IMPORTANTE: Configuração Manual Necessária
-
-Para o funcionamento correto das novas funcionalidades de consulta (buscar todos os resultados e dispositivos), é necessário criar manualmente o seguinte Índice Secundário Global (GSI) nas tabelas do DynamoDB:
-
-### GSI: EntityTypeIndex
-
-Este índice deve ser criado em **APENAS 2 tabelas** do projeto:
-
-1. **Tabela de Resultados** (`DYNAMODB_TABLE_NAME`) ✅
-2. **Tabela de Dispositivos** (`DYNAMODB_DEVICES_TABLE`) ✅
-3. **Tabela de Atividades** (`DYNAMODB_DEVICE_ACTIVITIES_TABLE`) ❌ **NÃO NECESSÁRIO**
-
-> **Nota**: A tabela de atividades já possui estrutura otimizada (`device_id` + `timestamp`) e não precisa do EntityTypeIndex, pois as consultas são sempre por dispositivo específico.
-
-#### Especificações do GSI:
-
-- **Nome do Índice**: `EntityTypeIndex`
-- **Chave de Partição (PK)**: `entity_type` (String)
-- **Chave de Ordenação (SK)**: `created_at` (String)
-- **Projeção**: `ALL` (todos os atributos)
-- **Modo de Capacidade**: Usar o mesmo da tabela principal
-
-#### Instruções para Criação via AWS Console:
-
-1. **Acesse o Console AWS DynamoDB**
-2. **Para cada tabela mencionada acima:**
-   - Navegue para a aba "Indexes"
-   - Clique em "Create index"
-   - Configure o índice com as especificações acima:
-     ```
-     Index name: EntityTypeIndex
-     Partition key: entity_type (String)
-     Sort key: created_at (String)
-     Projected attributes: All
-     ```
-   - Clique em "Create index"
-
-#### Instruções para Criação via AWS CLI:
-
-```bash
-# Para a tabela de resultados
-aws dynamodb update-table \
-    --table-name seu-nome-tabela-resultados \
-    --attribute-definitions \
-        AttributeName=entity_type,AttributeType=S \
-        AttributeName=created_at,AttributeType=S \
-    --global-secondary-index-updates \
-        '[{
-            "Create": {
-                "IndexName": "EntityTypeIndex",
-                "KeySchema": [
-                    {"AttributeName": "entity_type", "KeyType": "HASH"},
-                    {"AttributeName": "created_at", "KeyType": "RANGE"}
-                ],
-                "Projection": {"ProjectionType": "ALL"},
-                "ProvisionedThroughput": {
-                    "ReadCapacityUnits": 5,
-                    "WriteCapacityUnits": 5
-                }
-            }
-        }]'
-
-# Para a tabela de dispositivos
-aws dynamodb update-table \
-    --table-name seu-nome-tabela-dispositivos \
-    --attribute-definitions \
-        AttributeName=entity_type,AttributeType=S \
-        AttributeName=created_at,AttributeType=S \
-    --global-secondary-index-updates \
-        '[{
-            "Create": {
-                "IndexName": "EntityTypeIndex",
-                "KeySchema": [
-                    {"AttributeName": "entity_type", "KeyType": "HASH"},
-                    {"AttributeName": "created_at", "KeyType": "RANGE"}
-                ],
-                "Projection": {"ProjectionType": "ALL"},
-                "ProvisionedThroughput": {
-                    "ReadCapacityUnits": 5,
-                    "WriteCapacityUnits": 5
-                }
-            }
-        }]'
-```
-
-
-### Por que este GSI é Necessário?
-
-O `EntityTypeIndex` foi projetado para otimizar as seguintes consultas:
-
-1. **Buscar todos os resultados de inferência** (`GET /storage/results/all`)
-   - Consulta por `entity_type = "RESULT"` ou `entity_type = "COMBINED_RESULT"`
-   - Ordenação cronológica por `created_at`
-
-2. **Buscar todos os dispositivos** (`GET /devices/all`)
-   - Consulta por `entity_type = "DEVICE"`
-   - Ordenação cronológica por `created_at`
-
-3. **Análises e relatórios**
-   - Agregações por tipo de entidade
-   - Consultas temporais eficientes
-
-### Valores dos Campos entity_type:
-
-- **Tabela de Resultados**: `"RESULT"`, `"COMBINED_RESULT"`, `"IMAGE"`
-- **Tabela de Dispositivos**: `"DEVICE"`
-- **Tabela de Atividades**: ❌ **Não utiliza entity_type** (estrutura própria otimizada)
-
-### Formato do Campo created_at:
-
-- **Formato**: ISO 8601 UTC (ex: `"2024-12-09T15:30:45.123Z"`)
-- **Ordenação**: Decrescente (mais recentes primeiro)
-
-### Monitoramento do GSI:
-
-Após a criação, monitore:
-- Status do índice (deve ser `ACTIVE`)
-- Métricas de consumo de RCU/WCU
-- Latência das consultas
+| Primeira Entrega (Monolito)                                                                                                                  | Arquitetura Atual (Microsserviços) | Justificativa da Mudança                                                                                                                                    |
+|:---------------------------------------------------------------------------------------------------------------------------------------------| :--- |:------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Backend Único (Lambda)**: Uma única função Lambda continha toda a lógica de negócio, incluindo a geração de URLs, orquestração e consulta. | **Múltiplos Lambdas Especializados**: A lógica foi dividida em cinco microsserviços distintos (`Request Handler`, `Processing AI`, `Results Query`, `Device Management`, `Auth`). | **Separação de Responsabilidades**: Cada serviço tem um propósito claro, facilitando a manutenção e o desenvolvimento paralelo.                             |
+| **Código Compartilhado Interno**: Módulos de domínio e infraestrutura faziam parte da mesma base de código do Lambda.                        | **`shared-libs`**: Uma biblioteca Python compartilhada (`fruit-detection-shared`) foi criada e é instalada como uma dependência em cada Lambda. | **Reutilização e Consistência**: Centraliza entidades de domínio, modelos de dados e clientes de infraestrutura, garantindo consistência entre os serviços. |
+| **Gerenciamento de Estado Simples**: O estado do processamento era gerenciado de forma básica dentro da tabela principal.                    | **Rastreamento de Status Detalhado**: O `Request Handler` cria um registro de status inicial, que é atualizado pelo `Processing AI`, permitindo o rastreamento do progresso em tempo real. | **Melhor Experiência do Usuário**: Permite que o cliente consulte o andamento de suas solicitações assíncronas.                                             |
+| **Sem Gerenciamento de Dispositivos**: Não havia um serviço dedicado para gerenciar dispositivos de captura.                                 | **`lambda-device-management`**: Um serviço completo para registrar, monitorar (via heartbeats) e configurar dispositivos como Raspberry Pi. | **Escalabilidade e IoT**: Suporta a integração com dispositivos de hardware para captura automática de imagens.                                             |
+| **Sem Autenticação**: A API era aberta a todos.                                                                                              | **`lambda-auth`**: Um serviço dedicado para autenticação e gerenciamento de usuários, utilizando tokens JWT. | **Segurança**: Controla o acesso à API e permite a associação de requisições a usuários específicos. Controlado via API Gateway                             |
 
 ## Estrutura do Projeto
 
+O repositório está organizado em módulos, cada um representando um microsserviço ou recurso compartilhado.
+
 ```
-projeto-fastapi-lambda/
-├── .github/workflows/         # Configurações do GitHub Actions
-├── src/                       # Código-fonte
-│   ├── app/                   # Aplicação principal
-│   ├── modules/               # Módulos de funcionalidades
-│   │   ├── ia_integration/    # Integração com modelos de IA
-│   │   ├── storage/           # Gerenciamento de armazenamento
-│   │   └── device_monitoring/ # Monitoramento de dispositivos
-│   └── shared/                # Código compartilhado
-├── tests/                     # Testes automatizados
-├── requirements.txt          # Dependências de produção
-└── requirements-dev.txt      # Dependências de desenvolvimento
+fastapi-ia-tcc/
+├── lambda-auth/                # Serviço de autenticação e gerenciamento de usuários
+├── lambda-device-management/   # Serviço para gerenciar dispositivos de captura (Raspberry Pi)
+├── lambda-processing-ai/       # Serviço que consome da fila SQS e processa as imagens com a IA
+├── lambda-request-handler/     # Ponto de entrada da API, orquestra o processamento e upload de imagens
+├── lambda-results-query/       # Serviço otimizado para consulta de resultados
+├── shared-libs/                # Biblioteca compartilhada com código comum
+└── ...                         # (outros arquivos de configuração)
 ```
 
-## Novas Funcionalidades
+## Microsserviços
 
-### Consultas Otimizadas
+### 1. Request Handler (`lambda-request-handler`)
+- **Responsabilidade**: Ponto de entrada principal da API. Valida requisições, gera URLs pré-assinadas para upload no S3, enfileira tarefas de processamento no SQS e gerencia o status inicial das requisições.
+- **Tecnologias**: FastAPI, AWS Lambda, S3, SQS, DynamoDB.
 
-#### Buscar Todos os Resultados de Inferência
-```http
-GET /storage/results/all?limit=50&last_key=<base64_encoded_key>
-```
+### 2. Processing AI (`lambda-processing-ai`)
+- **Responsabilidade**: Consome mensagens da fila SQS, orquestra a chamada para o modelo de IA no EC2, atualiza o status do processamento no DynamoDB e notifica outros serviços (via SNS) sobre a conclusão.
+- **Tecnologias**: AWS Lambda, SQS, DynamoDB, EC2 (via HTTP client), SNS.
 
-Retorna todos os resultados de inferência com paginação eficiente usando o GSI EntityTypeIndex.
+### 3. Results Query (`lambda-results-query`)
+- **Responsabilidade**: Fornece endpoints otimizados para consulta de resultados de processamento. Permite a busca por diversos critérios (ID da requisição, ID do usuário, etc.) e a geração de estatísticas e sumários.
+- **Tecnologias**: FastAPI, AWS Lambda, DynamoDB (com GSIs).
 
-#### Buscar Todos os Dispositivos
-```http
-GET /devices/all?limit=50&last_key=<base64_encoded_key>
-```
+### 4. Device Management (`lambda-device-management`)
+- **Responsabilidade**: Gerencia o ciclo de vida de dispositivos de hardware (ex: Raspberry Pi), incluindo registro, monitoramento de atividade (heartbeat), configuração remota e rastreamento de estatísticas de captura.
+- **Tecnologias**: FastAPI, AWS Lambda, DynamoDB, SNS (para receber notificações).
 
-Retorna todos os dispositivos registrados com informações de status e estatísticas.
+### 5. Auth (`lambda-auth`)
+- **Responsabilidade**: Lida com a autenticação de usuários (login) e o gerenciamento de contas (CRUD de usuários). Emite e valida tokens JWT para proteger os endpoints da API.
+- **Tecnologias**: FastAPI, AWS Lambda, DynamoDB, JWT.
 
-### Paginação
+### 6. Shared Library (`shared-libs`)
+- **Responsabilidade**: Contém o código comum a todos os microsserviços, como entidades de domínio (ex: `User`, `Device`), modelos Pydantic, clientes para serviços AWS (`S3Client`, `DynamoClient`) e mappers. É empacotada e instalada como uma dependência.
+- **Tecnologias**: Python, Pydantic, Boto3.
 
-Ambas as novas rotas implementam paginação robusta:
-- **limit**: Número máximo de itens por página (1-200)
-- **last_key**: Chave codificada em base64 para continuar na próxima página
-- **next_key**: Chave retornada para acessar a próxima página
+## Configuração do DynamoDB - Índices Secundários Globais (GSI)
 
-## Como executar localmente
+Para o funcionamento correto das funcionalidades de consulta, é **essencial** criar manualmente os Índices Secundários Globais (GSI) nas tabelas do DynamoDB.
 
-1. Clone o repositório:
-```bash
-git clone https://github.com/tcc-2025-maturation-bunches/fastapi-ia-tcc
-cd fastapi-ia-tcc
-```
+### GSI: `EntityTypeIndex`
+- **Necessário em**: Tabela de Resultados e Tabela de Dispositivos.
+- **Chave de Partição (PK)**: `entity_type` (String)
+- **Chave de Ordenação (SK)**: `created_at` (String)
+- **Projeção**: `ALL`
 
-2. Crie e ative um ambiente virtual:
-```bash
-python -m venv venv
-source venv/bin/activate  # No Windows: venv\Scripts\activate
-```
+Este índice otimiza consultas como "buscar todos os resultados" ou "buscar todos os dispositivos", ordenando-os cronologicamente.
 
-3. Instale as dependências:
-```bash
-pip install -r requirements-dev.txt
-```
+### Outros Índices Recomendados
+- **`UserIdIndex`**: Para buscar resultados por usuário.
+- **`RequestIdIndex`**: Para buscar um resultado por seu ID de requisição.
+- **`ImageIdIndex`**: Para buscar resultados associados a uma imagem específica.
+- **`DeviceLocationIndex`**: Para buscar dispositivos por localização.
+- **`DeviceStatusIndex`**: Para buscar dispositivos por status (ativo/inativo).
 
-4. **Configure o DynamoDB GSI** seguindo as instruções acima
 
-5. Configure as variáveis de ambiente (copie `.env.template` para `.env`)
+## Como Executar Localmente
 
-## Variáveis de Ambiente
+1.  **Clone o repositório**:
+    ```bash
+    git clone https://github.com/tcc-2025-maturation-bunches/fastapi-ia-tcc
+    cd fastapi-ia-tcc
+    ```
 
-Configure as seguintes variáveis de ambiente:
+2.  **Crie e ative um ambiente virtual**:
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # No Windows: venv\Scripts\activate
+    ```
 
-- `ENVIRONMENT`: Ambiente de execução (dev, hom, prod)
-- `AWS_REGION`: Região da AWS
-- `DYNAMODB_TABLE_NAME`: Nome da tabela DynamoDB para resultados
-- `DYNAMODB_DEVICES_TABLE`: Nome da tabela DynamoDB para dispositivos
-- `DYNAMODB_DEVICE_ACTIVITIES_TABLE`: Nome da tabela DynamoDB para atividades
-- `EC2_IA_ENDPOINT`: Endpoint para o serviço de IA em EC2
+3.  **Instale as dependências de desenvolvimento**:
+    Isso instalará as dependências de todos os serviços e as ferramentas de lint/testes.
+    ```bash
+    pip install -r requirements-dev.txt
+    ```
 
-## Performance e Otimização
+4.  **Instale a biblioteca compartilhada (`shared-libs`) em modo editável**:
+    Isso permite que as alterações na `shared-libs` sejam refletidas imediatamente nos outros serviços.
+    ```bash
+    make install-shared
+    ```
 
-### Índices Recomendados
+5.  **Configure as variáveis de ambiente**:
+    Cada diretório de lambda (`lambda-*`) contém um arquivo `.env.template`. Copie-o para um arquivo `.env` e preencha as variáveis necessárias para o seu ambiente local (ex: URLs de serviços, nomes de tabelas).
 
-Além do `EntityTypeIndex`, considere criar os seguintes índices para melhor performance:
+6.  **Execute um dos microsserviços**:
+    Navegue até o diretório do serviço desejado e inicie o servidor Uvicorn. Por exemplo, para o `request-handler`:
+    ```bash
+    cd lambda-request-handler/
+    uvicorn src.app.main:app --reload --port 8000
+    ```
+    Acesse a documentação interativa em: `http://localhost:8000/docs`.
 
-1. **UserIdIndex** - Para consultas por usuário
-   - PK: `user_id`
-   - SK: `created_at`
+## Implantação
 
-2. **StatusIndex** - Para consultas por status (dispositivos)
-   - PK: `status`
-   - SK: `last_seen`
-
-3. **RequestIdIndex** - Para consultas por request_id
-   - PK: `request_id`
-   - SK: `created_at`
-
-### Monitoramento
-
-Monitore regularmente:
-- Consumo de RCU/WCU dos GSIs
-- Latência das consultas
-- Hot partitions
-- Throttling events
-
-## Licença
-
-Este projeto está licenciado sob os termos da licença MIT.
+O projeto utiliza **GitHub Actions** para CI/CD automatizado. Além disso, cada serviço contém seu próprio template de `template.yaml` para deploy via **AWS SAM**, facilitando a implantação na infraestrutura da AWS.
