@@ -20,12 +20,15 @@ class DynamoRepository:
             item.update(
                 {
                     "entity_type": "DEVICE",
+                    "device_id": device.device_id,
+                    "status": device.status,
+                    "location": device.location,
                     "created_at": device.created_at.isoformat(),
                     "updated_at": device.updated_at.isoformat(),
                 }
             )
             await self.dynamo_client.put_item(item)
-            logger.debug(f"Dispositivo {device.device_id} salvo no DynamoDB")
+            logger.debug(f"Dispositivo {device.device_id} salvo")
             return device
         except Exception as e:
             logger.exception(f"Erro ao salvar dispositivo {device.device_id}: {e}")
@@ -34,7 +37,6 @@ class DynamoRepository:
     async def get_device_by_id(self, device_id: str) -> Optional[Device]:
         try:
             key = {"pk": f"DEVICE#{device_id}", "sk": f"INFO#{device_id}"}
-
             item = await self.dynamo_client.get_item(key)
 
             if not item:
@@ -42,7 +44,6 @@ class DynamoRepository:
                 return None
 
             return Device.from_dict(item)
-
         except Exception as e:
             logger.exception(f"Erro ao obter dispositivo {device_id}: {e}")
             raise
@@ -54,49 +55,40 @@ class DynamoRepository:
         limit: int = 50,
     ) -> List[Device]:
         try:
-            query_result = await self.dynamo_client.query_with_pagination(
-                key_name="entity_type",
-                key_value="DEVICE",
-                index_name="EntityTypeIndex",
-                limit=limit,
-                scan_index_forward=False,
-            )
-
-            devices = []
-            for item in query_result.get("items", []):
-                try:
-                    device = Device.from_dict(item)
-
-                    if status_filter and device.status != status_filter:
-                        continue
-
-                    if location_filter and device.location != location_filter:
-                        continue
-
-                    devices.append(device)
-
-                except Exception as e:
-                    logger.warning(f"Erro ao converter item para Device: {e}")
-                    continue
+            if status_filter and location_filter:
+                devices = await self._query_by_status_and_location(status_filter, location_filter, limit)
+            elif status_filter:
+                devices = await self.get_devices_by_status(status_filter, limit)
+            elif location_filter:
+                devices = await self.get_devices_by_location(location_filter, limit)
+            else:
+                query_result = await self.dynamo_client.query_with_pagination(
+                    key_name="entity_type",
+                    key_value="DEVICE",
+                    index_name="EntityTypeIndex",
+                    limit=limit,
+                    scan_index_forward=False,
+                )
+                devices = [Device.from_dict(item) for item in query_result.get("items", [])]
 
             logger.debug(f"Listagem retornou {len(devices)} dispositivos")
             return devices
-
         except Exception as e:
             logger.exception(f"Erro ao listar dispositivos: {e}")
             raise
 
+    async def _query_by_status_and_location(self, status: str, location: str, limit: int) -> List[Device]:
+        devices_by_location = await self.get_devices_by_location(location, limit * 2)
+        filtered = [d for d in devices_by_location if d.status == status]
+        return filtered[:limit]
+
     async def delete_device(self, device_id: str) -> bool:
         try:
             key = {"pk": f"DEVICE#{device_id}", "sk": f"INFO#{device_id}"}
-
             success = await self.dynamo_client.delete_item(key)
-
             if success:
-                logger.info(f"Dispositivo {device_id} removido do DynamoDB")
-
+                logger.info(f"Dispositivo {device_id} removido")
             return success
-
         except Exception as e:
             logger.exception(f"Erro ao remover dispositivo {device_id}: {e}")
             return False
@@ -104,29 +96,18 @@ class DynamoRepository:
     async def get_devices_by_status(self, status: str, limit: int = 100) -> List[Device]:
         try:
             query_result = await self.dynamo_client.query_with_pagination(
-                key_name="entity_type",
-                key_value="DEVICE",
-                index_name="EntityTypeIndex",
+                key_name="status",
+                key_value=status,
+                index_name="DeviceStatusIndex",
                 limit=limit,
-                filter_expression="status = :status",
-                expression_values={":status": status},
                 scan_index_forward=False,
             )
 
-            devices = []
-            for item in query_result.get("items", []):
-                try:
-                    device = Device.from_dict(item)
-                    devices.append(device)
-                except Exception as e:
-                    logger.warning(f"Erro ao converter item para Device: {e}")
-                    continue
-
+            devices = [Device.from_dict(item) for item in query_result.get("items", [])]
             logger.debug(f"Encontrados {len(devices)} dispositivos com status {status}")
             return devices
-
         except Exception as e:
-            logger.exception(f"Erro ao obter dispositivos por status {status}: {e}")
+            logger.exception(f"Erro ao obter dispositivos por status: {e}")
             raise
 
     async def get_devices_by_location(self, location: str, limit: int = 100) -> List[Device]:
@@ -139,40 +120,36 @@ class DynamoRepository:
                 scan_index_forward=False,
             )
 
-            devices = []
-            for item in query_result.get("items", []):
-                try:
-                    device = Device.from_dict(item)
-                    devices.append(device)
-                except Exception as e:
-                    logger.warning(f"Erro ao converter item para Device: {e}")
-                    continue
-
+            devices = [Device.from_dict(item) for item in query_result.get("items", [])]
             logger.debug(f"Encontrados {len(devices)} dispositivos na localização {location}")
             return devices
-
         except Exception as e:
-            logger.exception(f"Erro ao obter dispositivos por localização {location}: {e}")
+            logger.exception(f"Erro ao obter dispositivos por localização: {e}")
             raise
 
     async def update_device_status(self, device_id: str, status: str) -> bool:
         try:
-            device = await self.get_device_by_id(device_id)
-            if not device:
-                logger.warning(f"Dispositivo {device_id} não encontrado para atualização")
-                return False
+            key = {"pk": f"DEVICE#{device_id}", "sk": f"INFO#{device_id}"}
+            now = datetime.now(timezone.utc).isoformat()
 
-            device.status = status
-            device.last_seen = datetime.now(timezone.utc)
-            device.updated_at = datetime.now(timezone.utc)
+            update_expression = "SET #status = :status, updated_at = :updated_at"
+            expression_values = {
+                ":status": status,
+                ":updated_at": now,
+            }
+            expression_names = {"#status": "status"}
 
-            await self.save_device(device)
+            await self.dynamo_client.update_item(
+                key=key,
+                update_expression=update_expression,
+                expression_values=expression_values,
+                expression_names=expression_names,
+            )
 
             logger.debug(f"Status do dispositivo {device_id} atualizado para {status}")
             return True
-
         except Exception as e:
-            logger.exception(f"Erro ao atualizar status do dispositivo {device_id}: {e}")
+            logger.exception(f"Erro ao atualizar status: {e}")
             return False
 
     async def update_device_config(self, device_id: str, config: dict) -> bool:
@@ -181,10 +158,7 @@ class DynamoRepository:
             now = datetime.now(timezone.utc).isoformat()
 
             update_expression = "SET config = :config, updated_at = :updated_at"
-            expression_values = {
-                ":config": config,
-                ":updated_at": now,
-            }
+            expression_values = {":config": config, ":updated_at": now}
 
             await self.dynamo_client.update_item(
                 key=key,
@@ -194,9 +168,8 @@ class DynamoRepository:
 
             logger.debug(f"Configuração do dispositivo {device_id} atualizada")
             return True
-
         except Exception as e:
-            logger.exception(f"Erro ao atualizar configuração do dispositivo {device_id}: {e}")
+            logger.exception(f"Erro ao atualizar configuração: {e}")
             return False
 
     async def update_device_stats(self, device_id: str, stats: dict) -> bool:
@@ -205,11 +178,7 @@ class DynamoRepository:
             now = datetime.now(timezone.utc).isoformat()
 
             update_expression = "SET stats = :stats, updated_at = :updated_at, last_seen = :last_seen"
-            expression_values = {
-                ":stats": stats,
-                ":updated_at": now,
-                ":last_seen": now,
-            }
+            expression_values = {":stats": stats, ":updated_at": now, ":last_seen": now}
 
             await self.dynamo_client.update_item(
                 key=key,
@@ -219,30 +188,62 @@ class DynamoRepository:
 
             logger.debug(f"Estatísticas do dispositivo {device_id} atualizadas")
             return True
-
         except Exception as e:
-            logger.exception(f"Erro ao atualizar estatísticas do dispositivo {device_id}: {e}")
+            logger.exception(f"Erro ao atualizar estatísticas: {e}")
             return False
+
+    async def get_offline_devices_optimized(self, timeout_minutes: int = 5) -> List[str]:
+        try:
+            cutoff_timestamp = datetime.now(timezone.utc).timestamp() - (timeout_minutes * 60)
+            cutoff_iso = datetime.fromtimestamp(cutoff_timestamp, tz=timezone.utc).isoformat()
+
+            try:
+                query_result = await self.dynamo_client.query_with_pagination(
+                    key_name="status",
+                    key_value="online",
+                    index_name="DeviceStatusIndex",
+                    limit=1000,
+                    scan_index_forward=False,
+                )
+            except Exception as e:
+                logger.warning(f"DeviceStatusIndex falhou, usando EntityTypeIndex: {e}")
+                query_result = await self.dynamo_client.query_with_pagination(
+                    key_name="entity_type",
+                    key_value="DEVICE",
+                    index_name="EntityTypeIndex",
+                    limit=1000,
+                    filter_expression="#status = :status",
+                    expression_values={":status": "online"},
+                    expression_names={"#status": "status"},
+                    scan_index_forward=False,
+                )
+
+            offline_device_ids = []
+            for item in query_result.get("items", []):
+                last_seen = item.get("last_seen")
+                if last_seen and last_seen < cutoff_iso:
+                    offline_device_ids.append(item["device_id"])
+
+            logger.debug(f"Encontrados {len(offline_device_ids)} dispositivos offline")
+            return offline_device_ids
+        except Exception as e:
+            logger.exception(f"Erro ao obter dispositivos offline: {e}")
+            raise
 
     async def get_offline_devices(self, timeout_minutes: int = 5) -> List[Device]:
         try:
-            cutoff_time = datetime.now(timezone.utc).timestamp() - (timeout_minutes * 60)
+            offline_ids = await self.get_offline_devices_optimized(timeout_minutes)
 
-            online_devices = await self.get_devices_by_status("online")
+            if not offline_ids:
+                return []
 
-            offline_devices = []
-            for device in online_devices:
-                if device.last_seen:
-                    last_seen = device.last_seen
-                    if isinstance(last_seen, str):
-                        last_seen = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+            devices = []
+            for device_id in offline_ids:
+                device = await self.get_device_by_id(device_id)
+                if device:
+                    devices.append(device)
 
-                    if last_seen.timestamp() < cutoff_time:
-                        offline_devices.append(device)
-
-            logger.debug(f"Encontrados {len(offline_devices)} dispositivos offline")
-            return offline_devices
-
+            return devices
         except Exception as e:
             logger.exception(f"Erro ao obter dispositivos offline: {e}")
             raise
@@ -253,7 +254,6 @@ class DynamoRepository:
 
             total_devices = len(devices)
             online_devices = sum(1 for d in devices if d.status == "online")
-
             total_captures = sum(d.stats.get("total_captures", 0) if d.stats else 0 for d in devices)
 
             return {
@@ -264,9 +264,8 @@ class DynamoRepository:
                 "total_captures": total_captures,
                 "average_captures_per_device": total_captures / total_devices if total_devices > 0 else 0,
             }
-
         except Exception as e:
-            logger.exception(f"Erro ao obter estatísticas da localização {location}: {e}")
+            logger.exception(f"Erro ao obter estatísticas da localização: {e}")
             raise
 
     async def update_device_last_seen(self, device_id: str) -> bool:
@@ -275,10 +274,7 @@ class DynamoRepository:
             now = datetime.now(timezone.utc).isoformat()
 
             update_expression = "SET last_seen = :last_seen, updated_at = :updated_at"
-            expression_values = {
-                ":last_seen": now,
-                ":updated_at": now,
-            }
+            expression_values = {":last_seen": now, ":updated_at": now}
 
             await self.dynamo_client.update_item(
                 key=key,
@@ -288,9 +284,8 @@ class DynamoRepository:
 
             logger.debug(f"Last seen do dispositivo {device_id} atualizado")
             return True
-
         except Exception as e:
-            logger.exception(f"Erro ao atualizar last seen do dispositivo {device_id}: {e}")
+            logger.exception(f"Erro ao atualizar last seen: {e}")
             return False
 
     async def get_recently_active_devices(self, limit: int = 50) -> List[Device]:
@@ -299,7 +294,7 @@ class DynamoRepository:
                 key_name="entity_type",
                 key_value="DEVICE",
                 index_name="EntityTypeIndex",
-                limit=limit,
+                limit=limit * 2,
                 scan_index_forward=False,
             )
 
@@ -309,14 +304,24 @@ class DynamoRepository:
                     device = Device.from_dict(item)
                     devices.append(device)
                 except Exception as e:
-                    logger.warning(f"Erro ao converter item para Device: {e}")
+                    logger.warning(f"Erro ao converter item: {e}")
                     continue
 
             devices.sort(key=lambda d: d.last_seen or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+            result = devices[:limit]
 
-            logger.debug(f"Encontrados {len(devices)} dispositivos ordenados por último acesso")
-            return devices
-
+            logger.debug(f"Encontrados {len(result)} dispositivos recentes")
+            return result
         except Exception as e:
             logger.exception(f"Erro ao obter dispositivos recentes: {e}")
             raise
+
+    async def batch_update_device_status(self, device_ids: List[str], status: str) -> int:
+        updated_count = 0
+        for device_id in device_ids:
+            success = await self.update_device_status(device_id, status)
+            if success:
+                updated_count += 1
+
+        logger.info(f"Atualização em lote: {updated_count}/{len(device_ids)} dispositivos")
+        return updated_count

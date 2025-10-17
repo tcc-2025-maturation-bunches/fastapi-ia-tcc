@@ -1,3 +1,4 @@
+from functools import lru_cache
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -10,6 +11,17 @@ from src.repository.dynamo_repository import DynamoRepository
 
 logger = logging.getLogger(__name__)
 
+def get_current_minute_timestamp():
+    now = datetime.now(timezone.utc)
+    return now.replace(second=0, microsecond=0)
+
+@lru_cache(maxsize=128)
+async def get_device_by_id_cached(device_id: str, dynamo_repository: DynamoRepository, ttl_hash: datetime) -> Optional[Device]:
+    try:
+        return await dynamo_repository.get_device_by_id(device_id)
+    except Exception as e:
+        logger.exception(f"Erro ao obter dispositivo (cache): {e}")
+        raise
 
 class DeviceService:
     def __init__(self, dynamo_repository: Optional[DynamoRepository] = None):
@@ -20,7 +32,7 @@ class DeviceService:
             existing_device = await self.dynamo_repository.get_device_by_id(request.device_id)
 
             if existing_device:
-                logger.info(f"Dispositivo {request.device_id} já existe. Registro ignorado.")
+                logger.info(f"Dispositivo {request.device_id} já existe")
                 raise ValueError(f"Dispositivo {request.device_id} já registrado")
 
             device = Device(
@@ -33,8 +45,7 @@ class DeviceService:
             )
 
             await self.dynamo_repository.save_device(device)
-
-            logger.info(f"Dispositivo {request.device_id} registrado com sucesso")
+            logger.info(f"Dispositivo {request.device_id} registrado")
 
             return {
                 "device_id": device.device_id,
@@ -43,25 +54,38 @@ class DeviceService:
                 "config": device.config,
                 "message": "Dispositivo registrado com sucesso",
             }
-
         except Exception as e:
-            logger.exception(f"Erro ao registrar dispositivo {request.device_id}: {e}")
+            logger.exception(f"Erro ao registrar dispositivo: {e}")
             raise
 
     async def process_heartbeat(
         self, device_id: str, status: str, additional_data: Optional[Dict[str, Any]] = None
     ) -> Optional[Dict[str, Any]]:
         try:
-            device = await self.dynamo_repository.get_device_by_id(device_id)
+            success = await self.dynamo_repository.update_device_last_seen(device_id)
 
-            if not device:
+            if not success:
                 logger.warning(f"Dispositivo {device_id} não encontrado para heartbeat")
                 return None
 
-            device.update_heartbeat(status=status, additional_data=additional_data)
-            await self.dynamo_repository.save_device(device)
+            if status != "online":
+                await self.dynamo_repository.update_device_status(device_id, status)
 
-            logger.debug(f"Heartbeat processado para dispositivo {device_id}")
+            device = await self.dynamo_repository.get_device_by_id(device_id)
+            if not device:
+                return None
+
+            if additional_data:
+                if "total_captures" in additional_data or "uptime_hours" in additional_data:
+                    updated_stats = device.stats.copy()
+                    if "total_captures" in additional_data:
+                        updated_stats["total_captures"] = additional_data["total_captures"]
+                    if "uptime_hours" in additional_data:
+                        updated_stats["uptime_hours"] = additional_data["uptime_hours"]
+
+                    await self.dynamo_repository.update_device_stats(device_id, updated_stats)
+
+            logger.debug(f"Heartbeat processado: {device_id}")
 
             pending_commands = await self._get_pending_commands(device_id)
             config_updates = await self._get_config_updates(device_id)
@@ -73,16 +97,19 @@ class DeviceService:
                 "commands": pending_commands,
                 "config_updates": config_updates,
             }
-
         except Exception as e:
-            logger.exception(f"Erro ao processar heartbeat para dispositivo {device_id}: {e}")
+            logger.exception(f"Erro ao processar heartbeat: {e}")
             raise
 
     async def get_device_by_id(self, device_id: str) -> Optional[Device]:
         try:
-            return await self.dynamo_repository.get_device_by_id(device_id)
+            return await get_device_by_id_cached(
+                device_id=device_id,
+                dynamo_repository=self.dynamo_repository,
+                ttl_hash=get_current_minute_timestamp()
+            )
         except Exception as e:
-            logger.exception(f"Erro ao obter dispositivo {device_id}: {e}")
+            logger.exception(f"Erro ao obter dispositivo: {e}")
             raise
 
     async def list_devices(
@@ -102,28 +129,24 @@ class DeviceService:
     async def update_device_config(self, device_id: str, config_updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         try:
             device = await self.dynamo_repository.get_device_by_id(device_id)
-
             if not device:
-                logger.warning(f"Dispositivo {device_id} não encontrado para atualização de config")
+                logger.warning(f"Dispositivo {device_id} não encontrado")
                 return None
 
             device.update_config(config_updates)
             await self.dynamo_repository.save_device(device)
 
-            logger.info(f"Configuração atualizada para dispositivo {device_id}")
-
+            logger.info(f"Configuração atualizada: {device_id}")
             return device.config
-
         except Exception as e:
-            logger.exception(f"Erro ao atualizar configuração do dispositivo {device_id}: {e}")
+            logger.exception(f"Erro ao atualizar configuração: {e}")
             raise
 
     async def update_device_statistics(self, device_id: str, processing_result: Dict[str, Any]) -> bool:
         try:
             device = await self.dynamo_repository.get_device_by_id(device_id)
-
             if not device:
-                logger.warning(f"Dispositivo {device_id} não encontrado para atualização de estatísticas")
+                logger.warning(f"Dispositivo {device_id} não encontrado")
                 return False
 
             success = processing_result.get("success", False)
@@ -138,12 +161,10 @@ class DeviceService:
                 device.stats["average_processing_time_ms"] = int(new_avg)
 
             await self.dynamo_repository.save_device(device)
-
-            logger.info(f"Estatísticas atualizadas para dispositivo {device_id} - Success: {success}")
+            logger.info(f"Estatísticas atualizadas: {device_id}")
             return True
-
         except Exception as e:
-            logger.exception(f"Erro ao atualizar estatísticas do dispositivo {device_id}: {e}")
+            logger.exception(f"Erro ao atualizar estatísticas: {e}")
             raise
 
     async def get_device_statistics(self) -> Dict[str, Any]:
@@ -151,18 +172,17 @@ class DeviceService:
             devices = await self.dynamo_repository.list_devices(limit=1000)
 
             total_devices = len(devices)
-            online_devices = sum(1 for d in devices if d.status == "online")
-            offline_devices = sum(1 for d in devices if d.status == "offline")
-            maintenance_devices = sum(1 for d in devices if d.status == "maintenance")
-            error_devices = sum(1 for d in devices if d.status == "error")
-
+            status_counts = {}
             devices_by_location = {}
+
             for device in devices:
-                location = device.location
-                devices_by_location[location] = devices_by_location.get(location, 0) + 1
+                status_counts[device.status] = status_counts.get(device.status, 0) + 1
+                devices_by_location[device.location] = devices_by_location.get(device.location, 0) + 1
 
             recent_registrations = []
-            for device in sorted(devices, key=lambda d: d.created_at, reverse=True)[:5]:
+            sorted_devices = sorted(devices, key=lambda d: d.created_at, reverse=True)[:5]
+
+            for device in sorted_devices:
                 recent_registrations.append(
                     {
                         "device_id": device.device_id,
@@ -175,23 +195,21 @@ class DeviceService:
 
             return {
                 "total_devices": total_devices,
-                "online_devices": online_devices,
-                "offline_devices": offline_devices,
-                "maintenance_devices": maintenance_devices,
-                "error_devices": error_devices,
+                "online_devices": status_counts.get("online", 0),
+                "offline_devices": status_counts.get("offline", 0),
+                "maintenance_devices": status_counts.get("maintenance", 0),
+                "error_devices": status_counts.get("error", 0),
                 "devices_by_location": devices_by_location,
                 "recent_registrations": recent_registrations,
             }
-
         except Exception as e:
-            logger.exception(f"Erro ao obter estatísticas dos dispositivos: {e}")
+            logger.exception(f"Erro ao obter estatísticas: {e}")
             raise
 
     async def update_global_config(self, global_config: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            devices = await self.dynamo_repository.list_devices(status_filter="online", limit=1000)
+            devices = await self.dynamo_repository.get_devices_by_status("online", limit=1000)
 
-            affected_devices = 0
             config_mapping = {
                 "min_capture_interval": "capture_interval",
                 "image_quality": "image_quality",
@@ -200,11 +218,13 @@ class DeviceService:
                 "min_maturation_confidence": "maturation_confidence",
             }
 
-            device_config_updates = {}
-            for global_key, device_key in config_mapping.items():
-                if global_key in global_config:
-                    device_config_updates[device_key] = global_config[global_key]
+            device_config_updates = {
+                device_key: global_config[global_key]
+                for global_key, device_key in config_mapping.items()
+                if global_key in global_config
+            }
 
+            affected_devices = 0
             if device_config_updates:
                 for device in devices:
                     device.update_config(device_config_updates)
@@ -212,31 +232,21 @@ class DeviceService:
                     affected_devices += 1
 
             logger.info(f"Configuração global aplicada a {affected_devices} dispositivos")
-
             return {"affected_devices": affected_devices, "updated_config": device_config_updates}
-
         except Exception as e:
             logger.exception(f"Erro ao atualizar configuração global: {e}")
             raise
 
     async def check_offline_devices(self) -> List[str]:
         try:
-            devices = await self.dynamo_repository.list_devices(status_filter="online", limit=1000)
-
-            offline_device_ids = []
             timeout_minutes = settings.HEARTBEAT_TIMEOUT_MINUTES
-
-            for device in devices:
-                if not device.is_online(timeout_minutes=timeout_minutes):
-                    device.status = "offline"
-                    await self.dynamo_repository.save_device(device)
-                    offline_device_ids.append(device.device_id)
+            offline_device_ids = await self.dynamo_repository.get_offline_devices_optimized(timeout_minutes)
 
             if offline_device_ids:
-                logger.warning(f"Dispositivos detectados como offline: {offline_device_ids}")
+                await self.dynamo_repository.batch_update_device_status(offline_device_ids, "offline")
+                logger.warning(f"Dispositivos offline: {len(offline_device_ids)}")
 
             return offline_device_ids
-
         except Exception as e:
             logger.exception(f"Erro ao verificar dispositivos offline: {e}")
             raise
@@ -251,7 +261,7 @@ class DeviceService:
         try:
             return await self.dynamo_repository.get_devices_by_status(status, limit)
         except Exception as e:
-            logger.exception(f"Erro ao obter dispositivos por status {status}: {e}")
+            logger.exception(f"Erro ao obter dispositivos por status: {e}")
             raise
 
     async def get_recently_active_devices(self, limit: int = 50) -> List[Device]:
@@ -269,11 +279,9 @@ class DeviceService:
             for device in devices:
                 status_counts[device.status] = status_counts.get(device.status, 0) + 1
 
-            active_devices = sorted(
-                [d for d in devices if d.stats and d.stats.get("total_captures", 0) > 0],
-                key=lambda d: d.stats.get("total_captures", 0),
-                reverse=True,
-            )[:5]
+            active_devices = [d for d in devices if d.stats and d.stats.get("total_captures", 0) > 0]
+            active_devices.sort(key=lambda d: d.stats.get("total_captures", 0), reverse=True)
+            top_active = active_devices[:5]
 
             now = datetime.now(timezone.utc)
             recent_activity = sum(1 for d in devices if d.last_seen and (now - d.last_seen).total_seconds() < 3600)
@@ -290,13 +298,12 @@ class DeviceService:
                         "total_captures": d.stats.get("total_captures", 0),
                         "last_seen": d.last_seen.isoformat() if d.last_seen else None,
                     }
-                    for d in active_devices
+                    for d in top_active
                 ],
                 "average_captures": (
                     sum(d.stats.get("total_captures", 0) for d in devices) / len(devices) if devices else 0
                 ),
             }
-
         except Exception as e:
-            logger.exception(f"Erro ao obter análise da localização {location}: {e}")
+            logger.exception(f"Erro ao obter análise da localização: {e}")
             raise
