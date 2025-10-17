@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -13,18 +14,13 @@ logger = logging.getLogger(__name__)
 pwd_context = PasswordHash.recommended()
 
 
-
-import asyncio
-
 class UserService:
     def __init__(self, repository: Optional[DynamoRepository] = None):
         self.repository = repository or DynamoRepository()
 
     async def get_password_hash(self, password: str) -> str:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None, lambda: pwd_context.hash(password)
-        )
+        return await loop.run_in_executor(None, lambda: pwd_context.hash(password))
 
     async def create_user(self, username: str, password: str, name: str, email: str, user_type: str = "user") -> User:
         try:

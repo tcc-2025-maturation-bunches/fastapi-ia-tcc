@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import timedelta
 from typing import Dict, Optional
@@ -13,24 +14,17 @@ logger = logging.getLogger(__name__)
 pwd_context = PasswordHash.recommended()
 
 
-
-import asyncio
-
 class AuthService:
     def __init__(self, repository: Optional[DynamoRepository] = None):
         self.repository = repository or DynamoRepository()
 
     async def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None, lambda: pwd_context.verify(plain_password, hashed_password)
-        )
+        return await loop.run_in_executor(None, lambda: pwd_context.verify(plain_password, hashed_password))
 
     async def get_password_hash(self, password: str) -> str:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None, lambda: pwd_context.hash(password)
-        )
+        return await loop.run_in_executor(None, lambda: pwd_context.hash(password))
 
     async def authenticate_user(self, username: str, password: str) -> Optional[Dict[str, str]]:
         try:
