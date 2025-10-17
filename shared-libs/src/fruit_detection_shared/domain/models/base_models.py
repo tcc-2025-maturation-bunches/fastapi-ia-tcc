@@ -71,12 +71,16 @@ class ContractDetectionSummary(BaseModel):
     objects_with_maturation: int
     detection_time_ms: int
     maturation_time_ms: int
-    average_maturation_score: float
+    average_maturation_score: Optional[float] = 0.0
     model_versions: Optional[ModelVersions] = None
 
     def __init__(self, **data):
         if "model_versions" in data and isinstance(data["model_versions"], dict):
             data["model_versions"] = ModelVersions(**data["model_versions"])
+
+        if data.get("average_maturation_score") is None:
+            data["average_maturation_score"] = 0.0
+
         super().__init__(**data)
 
 
