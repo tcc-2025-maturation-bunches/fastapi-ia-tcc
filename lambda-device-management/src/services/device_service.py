@@ -1,6 +1,6 @@
-from functools import lru_cache
 import logging
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from fruit_detection_shared.domain.entities import Device
@@ -11,17 +11,22 @@ from src.repository.dynamo_repository import DynamoRepository
 
 logger = logging.getLogger(__name__)
 
+
 def get_current_minute_timestamp():
     now = datetime.now(timezone.utc)
     return now.replace(second=0, microsecond=0)
 
+
 @lru_cache(maxsize=128)
-async def get_device_by_id_cached(device_id: str, dynamo_repository: DynamoRepository, ttl_hash: datetime) -> Optional[Device]:
+async def get_device_by_id_cached(
+    device_id: str, dynamo_repository: DynamoRepository, ttl_hash: datetime
+) -> Optional[Device]:
     try:
         return await dynamo_repository.get_device_by_id(device_id)
     except Exception as e:
         logger.exception(f"Erro ao obter dispositivo (cache): {e}")
         raise
+
 
 class DeviceService:
     def __init__(self, dynamo_repository: Optional[DynamoRepository] = None):
@@ -104,9 +109,7 @@ class DeviceService:
     async def get_device_by_id(self, device_id: str) -> Optional[Device]:
         try:
             return await get_device_by_id_cached(
-                device_id=device_id,
-                dynamo_repository=self.dynamo_repository,
-                ttl_hash=get_current_minute_timestamp()
+                device_id=device_id, dynamo_repository=self.dynamo_repository, ttl_hash=get_current_minute_timestamp()
             )
         except Exception as e:
             logger.exception(f"Erro ao obter dispositivo: {e}")
