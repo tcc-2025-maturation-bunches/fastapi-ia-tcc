@@ -119,6 +119,17 @@ class DynamoRepository:
                 )
                 items = query_result.get("items", [])
                 next_key = query_result.get("last_evaluated_key")
+            elif status_filter:
+                query_result = await self.dynamo_client.query_with_pagination(
+                    key_name="status",
+                    key_value=status_filter,
+                    index_name="StatusCreatedIndex",
+                    limit=limit * 2,
+                    last_evaluated_key=last_evaluated_key,
+                    scan_index_forward=False,
+                )
+                items = query_result.get("items", [])
+                next_key = query_result.get("last_evaluated_key")
             else:
                 query_result = await self.dynamo_client.query_with_pagination(
                     key_name="entity_type",

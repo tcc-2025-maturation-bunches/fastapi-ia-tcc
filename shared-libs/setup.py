@@ -9,6 +9,7 @@ setup(
     install_requires=[
         "boto3>=1.38.27",
         "aioboto3>=15.0.0",
+        "aiohttp>=3.11.18",
         "pydantic>=2.9.0",
         "fastapi>=0.115.12",
     ],
