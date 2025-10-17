@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from src.app.config import settings
 from src.processor.processing_service import ProcessingService
@@ -24,6 +24,10 @@ async def process_message_async(processing_service: ProcessingService, message_b
             "error": str(e),
             "request_id": message_body.get("request_id"),
         }
+
+
+async def process_all_messages(tasks: List):
+    return await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def lambda_handler(event, context):
@@ -69,7 +73,7 @@ def lambda_handler(event, context):
         except json.JSONDecodeError as e:
             logger.error(f"Erro ao decodificar JSON da mensagem {message_id}: {e}")
 
-    results = asyncio.run(asyncio.gather(*tasks, return_exceptions=True))
+    results = asyncio.run(process_all_messages(tasks))
 
     successful = sum(1 for r in results if isinstance(r, dict) and r.get("success"))
     failed = len(results) - successful
