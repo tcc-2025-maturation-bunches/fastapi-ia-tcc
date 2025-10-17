@@ -2,22 +2,29 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from fruit_detection_shared.domain.entities import Image
-from fruit_detection_shared.infra.external import SNSClient
+from fruit_detection_shared.domain.entities import CombinedResult, Image
 from fruit_detection_shared.mappers import RequestSummaryMapper
 
-from src.app.config import settings
 from src.processor.repository.dynamo_repository import DynamoRepository
-from src.processor.repository.ia_repository import IARepository
+from src.processor.services.ia_service import IAService
+from src.processor.services.notification_service import NotificationService
+from src.processor.services.status_service import ProcessingStage, StatusService
 
 logger = logging.getLogger(__name__)
 
 
 class CombinedProcessingUseCase:
-    def __init__(self, ia_repository: IARepository, dynamo_repository: DynamoRepository):
-        self.ia_repository = ia_repository
+    def __init__(
+        self,
+        ia_service: IAService,
+        status_service: StatusService,
+        notification_service: NotificationService,
+        dynamo_repository: DynamoRepository,
+    ):
+        self.ia_service = ia_service
+        self.status_service = status_service
+        self.notification_service = notification_service
         self.dynamo_repository = dynamo_repository
-        self.sns_client = SNSClient(region=settings.AWS_REGION)
 
     async def execute_processing(
         self,
@@ -27,144 +34,141 @@ class CombinedProcessingUseCase:
         result_upload_url: Optional[str],
         metadata: Dict[str, Any],
         maturation_threshold: float = 0.6,
-    ) -> Dict[str, Any]:
+    ) -> CombinedResult:
+        device_id = metadata.get("device_id")
+        image_id = metadata.get("image_id")
+        location = metadata.get("location")
+
         try:
-            await self._update_status(request_id, "processing", 0.1)
+            await self.status_service.update_stage(request_id, ProcessingStage.PROCESSING)
 
-            image = Image(image_url=image_url, user_id=user_id, metadata=metadata, image_id=metadata.get("image_id"))
+            image = self._create_image_entity(image_url, user_id, metadata, image_id)
 
-            await self._update_status(request_id, "processing_ai", 0.3)
+            await self.status_service.update_stage(request_id, ProcessingStage.PROCESSING_AI)
 
-            combined_result = await self.ia_repository.process_combined(
-                image=image, result_upload_url=result_upload_url, maturation_threshold=maturation_threshold
+            combined_result = await self.ia_service.process_image(
+                image=image,
+                result_upload_url=result_upload_url,
+                maturation_threshold=maturation_threshold,
             )
 
-            await self._update_status(request_id, "saving_results", 0.8)
+            if combined_result.status == "error":
+                await self._handle_processing_error(
+                    request_id=request_id,
+                    error_result=combined_result,
+                    device_id=device_id,
+                    user_id=user_id,
+                    image_id=image_id,
+                )
+                return combined_result
 
-            full_metadata = metadata.copy()
-            full_metadata["image_url"] = image_url
-            full_metadata["image_id"] = image.image_id
-            if "timestamp" not in full_metadata:
-                full_metadata["timestamp"] = datetime.now(timezone.utc).isoformat()
+            await self.status_service.update_stage(request_id, ProcessingStage.SAVING_RESULTS)
 
-            final_item = RequestSummaryMapper.to_dynamo_item(
-                user_id=user_id, request_id=request_id, initial_metadata=full_metadata, combined_result=combined_result
-            )
-
-            await self.dynamo_repository.save_request_summary(final_item)
-
-            await self._update_status(request_id, "completed", 1.0)
-
-            await self._notify_device_management(
+            await self._save_results(
+                user_id=user_id,
                 request_id=request_id,
-                device_id=metadata.get("device_id"),
-                processing_result=combined_result,
                 metadata=metadata,
+                image_url=image_url,
+                combined_result=combined_result,
             )
 
-            logger.info(f"Processamento combinado concluído: {request_id}")
+            await self.status_service.mark_as_completed(
+                request_id=request_id,
+                processing_time_ms=combined_result.processing_time_ms,
+                result_url=combined_result.image_result_url,
+            )
 
+            await self.notification_service.notify_processing_complete(
+                request_id=request_id,
+                device_id=device_id,
+                processing_result=combined_result,
+                user_id=user_id,
+                image_id=image_id,
+                location=location,
+            )
+
+            logger.info(f"Processamento concluído com sucesso: {request_id}")
             return combined_result
 
         except Exception as e:
             logger.exception(f"Erro no processamento combinado: {e}")
 
-            await self._update_status(request_id, "error", 1.0, error=str(e), error_code="PROCESSING_ERROR")
-
-            await self._notify_device_management(
+            await self._handle_processing_error(
                 request_id=request_id,
-                device_id=metadata.get("device_id"),
-                processing_result=None,
-                metadata=metadata,
-                error=str(e),
+                error_result=CombinedResult(
+                    status="error",
+                    error_message=str(e),
+                    error_code="PROCESSING_ERROR",
+                ),
+                device_id=device_id,
+                user_id=user_id,
+                image_id=image_id,
             )
 
             raise
 
-    async def _notify_device_management(
+    async def _save_results(
         self,
+        user_id: str,
         request_id: str,
-        device_id: Optional[str],
-        processing_result: Optional[Any],
         metadata: Dict[str, Any],
-        error: Optional[str] = None,
-    ):
-        try:
-            if not device_id:
-                logger.debug(f"Nenhum device_id fornecido para request_id {request_id}, pulando notificação")
-                return
+        image_url: str,
+        combined_result: CombinedResult,
+    ) -> None:
+        full_metadata = metadata.copy()
+        full_metadata["image_url"] = image_url
+        full_metadata["image_id"] = metadata.get("image_id")
 
-            notification_payload = {
-                "event_type": "processing_complete",
-                "request_id": request_id,
-                "device_id": device_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "metadata": {
-                    "user_id": metadata.get("user_id"),
-                    "image_id": metadata.get("image_id"),
-                    "location": metadata.get("location"),
-                },
-            }
+        if "timestamp" not in full_metadata:
+            full_metadata["timestamp"] = datetime.now(timezone.utc).isoformat()
 
-            if error:
-                notification_payload.update(
-                    {
-                        "status": "error",
-                        "error_message": error,
-                        "processing_result": {"success": False, "processing_time_ms": 0},
-                    }
-                )
-            else:
-                success = processing_result and processing_result.status == "success"
-                notification_payload.update(
-                    {
-                        "status": "success" if success else "error",
-                        "processing_result": {
-                            "success": success,
-                            "processing_time_ms": getattr(processing_result, "processing_time_ms", 0),
-                            "detection_count": (
-                                len(processing_result.detection.results)
-                                if processing_result and processing_result.detection
-                                else 0
-                            ),
-                        },
-                    }
-                )
+        dynamo_item = RequestSummaryMapper.to_dynamo_item(
+            user_id=user_id,
+            request_id=request_id,
+            initial_metadata=full_metadata,
+            combined_result=combined_result,
+        )
 
-            topic_arn = settings.SNS_DEVICE_MANAGEMENT_TOPIC
-            if topic_arn:
-                message_id = self.sns_client.publish_message(
-                    topic_arn=topic_arn,
-                    message=notification_payload,
-                    subject=f"Processing Complete - Device {device_id}",
-                    message_attributes={
-                        "event_type": {"DataType": "String", "StringValue": "processing_complete"},
-                        "device_id": {"DataType": "String", "StringValue": device_id},
-                    },
-                )
-                logger.info(f"Notificação SNS enviada para Device Management: {message_id}")
-            else:
-                logger.warning("SNS_DEVICE_MANAGEMENT_TOPIC não configurado, pulando notificação")
+        await self.dynamo_repository.put_item(dynamo_item)
+        logger.info(f"Resultados salvos no DynamoDB: {request_id}")
 
-        except Exception as e:
-            logger.warning(f"Falha ao notificar Device Management para device {device_id}: {e}")
-
-    async def _update_status(
+    async def _handle_processing_error(
         self,
         request_id: str,
-        status: str,
-        progress: float,
-        error: Optional[str] = None,
-        error_code: Optional[str] = None,
-    ):
-        try:
-            status_data = {"status": status, "progress": progress, "updated_at": datetime.now(timezone.utc).isoformat()}
+        error_result: CombinedResult,
+        device_id: Optional[str],
+        user_id: str,
+        image_id: str,
+    ) -> None:
+        error_message = error_result.error_message or "Erro desconhecido"
+        error_code = error_result.error_code or "UNKNOWN_ERROR"
 
-            if error:
-                status_data["error"] = error
-                status_data["error_code"] = error_code or "UNKNOWN_ERROR"
+        await self.status_service.mark_as_failed(
+            request_id=request_id,
+            error_message=error_message,
+            error_code=error_code,
+            error_details=error_result.error_details,
+        )
 
-            await self.dynamo_repository.update_processing_status(request_id, status_data)
+        await self.notification_service.notify_processing_failed(
+            request_id=request_id,
+            device_id=device_id,
+            error_message=error_message,
+            error_code=error_code,
+            user_id=user_id,
+            image_id=image_id,
+        )
 
-        except Exception as e:
-            logger.warning(f"Erro ao atualizar status para {request_id}: {e}")
+    def _create_image_entity(
+        self,
+        image_url: str,
+        user_id: str,
+        metadata: Dict[str, Any],
+        image_id: Optional[str],
+    ) -> Image:
+        return Image(
+            image_url=image_url,
+            user_id=user_id,
+            metadata=metadata,
+            image_id=image_id,
+        )
