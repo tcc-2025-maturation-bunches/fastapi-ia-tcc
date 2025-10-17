@@ -19,7 +19,8 @@ class RetryContext:
 
 class EC2Client:
     _session: Optional[aiohttp.ClientSession] = None
-    _lock = asyncio.Lock()
+    _session_loop: Optional[asyncio.AbstractEventLoop] = None
+    _lock = None
 
     def __init__(self, base_url: str, timeout: int = 30):
         if not base_url:
@@ -31,10 +32,31 @@ class EC2Client:
         logger.info(f"Inicializando cliente EC2 para endpoint {self.base_url}")
 
     @classmethod
+    def _get_lock(cls):
+        try:
+            loop = asyncio.get_running_loop()
+            if cls._lock is None or cls._lock._loop != loop:
+                cls._lock = asyncio.Lock()
+            return cls._lock
+        except RuntimeError:
+            if cls._lock is None:
+                cls._lock = asyncio.Lock()
+            return cls._lock
+
+    @classmethod
     async def get_session(cls) -> aiohttp.ClientSession:
-        if cls._session is None or cls._session.closed:
-            async with cls._lock:
-                if cls._session is None or cls._session.closed:
+        current_loop = asyncio.get_running_loop()
+
+        if cls._session is None or cls._session.closed or cls._session_loop != current_loop:
+            lock = cls._get_lock()
+            async with lock:
+                if cls._session is None or cls._session.closed or cls._session_loop != current_loop:
+                    if cls._session is not None and not cls._session.closed:
+                        try:
+                            await cls._session.close()
+                        except Exception as e:
+                            logger.warning(f"Erro ao fechar sessão antiga: {e}")
+
                     connector = aiohttp.TCPConnector(
                         limit=100,
                         limit_per_host=30,
@@ -46,6 +68,9 @@ class EC2Client:
                         connector=connector,
                         timeout=aiohttp.ClientTimeout(total=300),
                     )
+                    cls._session_loop = current_loop
+                    logger.info("Nova sessão aiohttp criada para o event loop atual")
+
         return cls._session
 
     @classmethod
@@ -53,10 +78,11 @@ class EC2Client:
         if cls._session and not cls._session.closed:
             await cls._session.close()
             cls._session = None
+            cls._session_loop = None
 
     def _calculate_backoff(self, attempt: int, base: float = 2.0, max_wait: float = 30.0) -> float:
         wait = min(base**attempt, max_wait)
-        jitter = random.uniform(0, wait * 0.1)  # 10% de jitter
+        jitter = random.uniform(0, wait * 0.1)
         return wait + jitter
 
     async def _make_request(self, url: str, payload: Dict[str, Any], retry_count: int = 3) -> Dict[str, Any]:
@@ -119,7 +145,7 @@ class EC2Client:
                     "retry_info": asdict(retry_ctx),
                 }
 
-            except aiohttp.ClientError as e:
+            except (aiohttp.ClientError, RuntimeError) as e:
                 retry_ctx.last_error = f"Erro de conexão: {str(e)}"
 
                 if attempt < retry_count - 1:
@@ -129,6 +155,11 @@ class EC2Client:
                         f"Erro de conexão na tentativa {attempt + 1}/{retry_count}, "
                         f"retentando em {wait_time:.2f}s: {e}"
                     )
+
+                    if isinstance(e, RuntimeError) and "Event loop is closed" in str(e):
+                        logger.warning("Event loop fechado detectado, recriando sessão...")
+                        await self.close_session()
+
                     await asyncio.sleep(wait_time)
                     continue
 
