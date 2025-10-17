@@ -1,10 +1,9 @@
-import json
 import logging
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-import boto3
+import aioboto3
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
@@ -23,15 +22,20 @@ def floats_to_decimals(obj: Any) -> Any:
 
 
 class DynamoClient:
+    _session: Optional[aioboto3.Session] = None
+
     def __init__(self, table_name: str, region: str = "us-east-1"):
         if not table_name:
             raise ValueError("table_name é obrigatório")
 
         self.table_name = table_name
         self.region = region
-        self.client = boto3.resource("dynamodb", region_name=self.region)
-        self.table = self.client.Table(self.table_name)
-        logger.info(f"Inicializando cliente DynamoDB para tabela {self.table_name}")
+
+        if DynamoClient._session is None:
+            DynamoClient._session = aioboto3.Session()
+
+        self.session = DynamoClient._session
+        logger.info(f"Inicializando cliente DynamoDB assíncrono para tabela {self.table_name}")
 
     def convert_from_dynamo_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
         if not item:
@@ -44,11 +48,6 @@ class DynamoClient:
                     result[key] = datetime.fromisoformat(value)
                 except ValueError:
                     result[key] = value
-            elif key in ["results", "metadata", "summary"] and isinstance(value, str):
-                try:
-                    result[key] = json.loads(value)
-                except json.JSONDecodeError:
-                    result[key] = value
             else:
                 result[key] = value
         return result
@@ -56,35 +55,42 @@ class DynamoClient:
     async def put_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
         dynamo_item = floats_to_decimals(item)
 
-        try:
-            self.table.put_item(Item=dynamo_item)
-            pk_value = dynamo_item.get("PK") or dynamo_item.get("pk")
-            logger.info(f"Item inserido com sucesso: pk={pk_value}")
-            return dynamo_item
-        except Exception as e:
-            logger.error(f"Erro ao inserir item no DynamoDB: {e}")
-            raise
+        async with self.session.resource("dynamodb", region_name=self.region) as dynamodb:
+            table = await dynamodb.Table(self.table_name)
+
+            try:
+                await table.put_item(Item=dynamo_item)
+                pk_value = dynamo_item.get("PK") or dynamo_item.get("pk")
+                logger.debug(f"Item inserido: pk={pk_value}")
+                return dynamo_item
+            except Exception as e:
+                logger.error(f"Erro ao inserir item no DynamoDB: {e}")
+                raise
 
     async def get_item(self, key: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        try:
-            response = self.table.get_item(Key=key)
+        async with self.session.resource("dynamodb", region_name=self.region) as dynamodb:
+            table = await dynamodb.Table(self.table_name)
 
-            if "Item" not in response:
+            try:
+                response = await table.get_item(Key=key)
+                if "Item" not in response:
+                    return None
+                return self.convert_from_dynamo_item(response["Item"])
+            except Exception as e:
+                logger.exception(f"Erro ao recuperar item: {e}")
                 return None
 
-            return self.convert_from_dynamo_item(response["Item"])
-        except Exception as e:
-            logger.exception(f"Erro ao recuperar item do DynamoDB: {e}")
-            return None
-
     async def delete_item(self, key: Dict[str, Any]) -> bool:
-        try:
-            self.table.delete_item(Key=key)
-            logger.info(f"Item removido com sucesso: {key}")
-            return True
-        except Exception as e:
-            logger.error(f"Erro ao remover item do DynamoDB: {e}")
-            return False
+        async with self.session.resource("dynamodb", region_name=self.region) as dynamodb:
+            table = await dynamodb.Table(self.table_name)
+
+            try:
+                await table.delete_item(Key=key)
+                logger.debug(f"Item removido: {key}")
+                return True
+            except Exception as e:
+                logger.error(f"Erro ao remover item: {e}")
+                return False
 
     async def update_item(
         self,
@@ -94,28 +100,30 @@ class DynamoClient:
         expression_names: Optional[Dict[str, str]] = None,
         condition_expression: Optional[str] = None,
     ) -> Dict[str, Any]:
-        try:
-            update_kwargs = {
-                "Key": key,
-                "UpdateExpression": update_expression,
-                "ReturnValues": "ALL_NEW",
-            }
+        async with self.session.resource("dynamodb", region_name=self.region) as dynamodb:
+            table = await dynamodb.Table(self.table_name)
 
-            if expression_values:
-                update_kwargs["ExpressionAttributeValues"] = floats_to_decimals(expression_values)
-            if expression_names:
-                update_kwargs["ExpressionAttributeNames"] = expression_names
-            if condition_expression:
-                update_kwargs["ConditionExpression"] = condition_expression
+            try:
+                update_kwargs = {
+                    "Key": key,
+                    "UpdateExpression": update_expression,
+                    "ReturnValues": "ALL_NEW",
+                }
 
-            response = self.table.update_item(**update_kwargs)
-            updated_item = response.get("Attributes", {})
+                if expression_values:
+                    update_kwargs["ExpressionAttributeValues"] = floats_to_decimals(expression_values)
+                if expression_names:
+                    update_kwargs["ExpressionAttributeNames"] = expression_names
+                if condition_expression:
+                    update_kwargs["ConditionExpression"] = condition_expression
 
-            logger.info(f"Item atualizado com sucesso: {key}")
-            return self.convert_from_dynamo_item(updated_item)
-        except Exception as e:
-            logger.error(f"Erro ao atualizar item no DynamoDB: {e}")
-            raise
+                response = await table.update_item(**update_kwargs)
+                updated_item = response.get("Attributes", {})
+                logger.debug(f"Item atualizado: {key}")
+                return self.convert_from_dynamo_item(updated_item)
+            except Exception as e:
+                logger.error(f"Erro ao atualizar item: {e}")
+                raise
 
     async def query_items(
         self,
@@ -126,30 +134,30 @@ class DynamoClient:
         scan_index_forward: bool = True,
         last_evaluated_key: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
-        try:
-            query_kwargs = {
-                "KeyConditionExpression": "#key_name = :value",
-                "ExpressionAttributeValues": {":value": key_value},
-                "ExpressionAttributeNames": {"#key_name": key_name},
-                "ScanIndexForward": scan_index_forward,
-            }
+        async with self.session.resource("dynamodb", region_name=self.region) as dynamodb:
+            table = await dynamodb.Table(self.table_name)
 
-            if index_name:
-                query_kwargs["IndexName"] = index_name
+            try:
+                from boto3.dynamodb.conditions import Key
 
-            if limit:
-                query_kwargs["Limit"] = limit
+                query_kwargs = {
+                    "KeyConditionExpression": Key(key_name).eq(key_value),
+                    "ScanIndexForward": scan_index_forward,
+                }
 
-            if last_evaluated_key:
-                query_kwargs["ExclusiveStartKey"] = last_evaluated_key
+                if index_name:
+                    query_kwargs["IndexName"] = index_name
+                if limit:
+                    query_kwargs["Limit"] = limit
+                if last_evaluated_key:
+                    query_kwargs["ExclusiveStartKey"] = last_evaluated_key
 
-            response = self.table.query(**query_kwargs)
-            items = response.get("Items", [])
-
-            return [self.convert_from_dynamo_item(item) for item in items]
-        except Exception as e:
-            logger.error(f"Erro ao consultar itens no DynamoDB: {e}")
-            raise
+                response = await table.query(**query_kwargs)
+                items = response.get("Items", [])
+                return [self.convert_from_dynamo_item(item) for item in items]
+            except Exception as e:
+                logger.error(f"Erro ao consultar itens: {e}")
+                raise
 
     async def query_with_pagination(
         self,
@@ -163,80 +171,86 @@ class DynamoClient:
         expression_values: Optional[Dict[str, Any]] = None,
         expression_names: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
-        try:
-            query_kwargs = {
-                "KeyConditionExpression": "#key_name = :key_value",
-                "ExpressionAttributeNames": {"#key_name": key_name},
-                "ExpressionAttributeValues": {":key_value": key_value},
-                "ScanIndexForward": scan_index_forward,
-            }
+        async with self.session.resource("dynamodb", region_name=self.region) as dynamodb:
+            table = await dynamodb.Table(self.table_name)
 
-            if expression_values:
-                query_kwargs["ExpressionAttributeValues"].update(expression_values)
+            try:
+                from boto3.dynamodb.conditions import Attr, Key
 
-            if index_name:
-                query_kwargs["IndexName"] = index_name
+                query_kwargs = {
+                    "KeyConditionExpression": Key(key_name).eq(key_value),
+                    "ScanIndexForward": scan_index_forward,
+                }
 
-            if limit:
-                query_kwargs["Limit"] = limit
+                if index_name:
+                    query_kwargs["IndexName"] = index_name
+                if limit:
+                    query_kwargs["Limit"] = limit
+                if last_evaluated_key:
+                    query_kwargs["ExclusiveStartKey"] = last_evaluated_key
 
-            if last_evaluated_key:
-                query_kwargs["ExclusiveStartKey"] = last_evaluated_key
+                if filter_expression and expression_values:
+                    filter_conditions = []
+                    for expr_part in filter_expression.split(" AND "):
+                        expr_part = expr_part.strip()
+                        if "=" in expr_part:
+                            attr_name = expr_part.split("=")[0].strip().replace("#", "")
+                            value_key = expr_part.split("=")[1].strip()
+                            if attr_name in expression_names:
+                                attr_name = expression_names[attr_name]
+                            filter_conditions.append(Attr(attr_name).eq(expression_values[value_key]))
 
-            if filter_expression:
-                query_kwargs["FilterExpression"] = filter_expression
+                    if filter_conditions:
+                        combined_filter = filter_conditions[0]
+                        for condition in filter_conditions[1:]:
+                            combined_filter = combined_filter & condition
+                        query_kwargs["FilterExpression"] = combined_filter
 
-            if expression_names:
-                query_kwargs["ExpressionAttributeNames"] = expression_names
+                response = await table.query(**query_kwargs)
+                items = [self.convert_from_dynamo_item(item) for item in response.get("Items", [])]
 
-            response = self.table.query(**query_kwargs)
+                result = {
+                    "items": items,
+                    "count": response.get("Count", 0),
+                    "scanned_count": response.get("ScannedCount", 0),
+                }
 
-            items = [self.convert_from_dynamo_item(item) for item in response.get("Items", [])]
+                if "LastEvaluatedKey" in response:
+                    result["last_evaluated_key"] = response["LastEvaluatedKey"]
 
-            result = {
-                "items": items,
-                "count": response.get("Count", 0),
-                "scanned_count": response.get("ScannedCount", 0),
-            }
+                return result
+            except Exception as e:
+                logger.error(f"Erro ao consultar com paginação: {e}")
+                raise
 
-            if "LastEvaluatedKey" in response:
-                result["last_evaluated_key"] = response["LastEvaluatedKey"]
+    async def get_table_info(self) -> Dict[str, Any]:
+        async with self.session.client("dynamodb", region_name=self.region) as client:
+            try:
+                response = await client.describe_table(TableName=self.table_name)
+                table_info = response["Table"]
 
-            return result
-        except Exception as e:
-            logger.error(f"Erro ao consultar itens com paginação no DynamoDB: {e}")
-            raise
+                result = {
+                    "table_name": table_info["TableName"],
+                    "table_status": table_info["TableStatus"],
+                    "item_count": table_info.get("ItemCount", 0),
+                    "table_size_bytes": table_info.get("TableSizeBytes", 0),
+                    "creation_date_time": table_info.get("CreationDateTime"),
+                    "global_secondary_indexes": [],
+                }
 
-    def get_table_info(self) -> Dict[str, Any]:
-        try:
-            response = self.table.meta.client.describe_table(TableName=self.table_name)
-            table_info = response["Table"]
+                if "GlobalSecondaryIndexes" in table_info:
+                    for gsi in table_info["GlobalSecondaryIndexes"]:
+                        gsi_info = {
+                            "index_name": gsi["IndexName"],
+                            "key_schema": gsi["KeySchema"],
+                            "projection": gsi["Projection"],
+                        }
+                        result["global_secondary_indexes"].append(gsi_info)
 
-            result = {
-                "table_name": table_info["TableName"],
-                "table_status": table_info["TableStatus"],
-                "item_count": table_info.get("ItemCount", 0),
-                "table_size_bytes": table_info.get("TableSizeBytes", 0),
-                "creation_date_time": table_info.get("CreationDateTime"),
-                "global_secondary_indexes": [],
-            }
-
-            if "GlobalSecondaryIndexes" in table_info:
-                for gsi in table_info["GlobalSecondaryIndexes"]:
-                    gsi_info = {
-                        "index_name": gsi["IndexName"],
-                        "key_schema": gsi["KeySchema"],
-                        "projection": gsi["Projection"],
-                    }
-                    result["global_secondary_indexes"].append(gsi_info)
-
-            return result
-        except ClientError as e:
-            logger.error(f"Erro ao obter informações da tabela: {e}")
-            return {}
-        except Exception as e:
-            logger.error(f"Erro inesperado ao obter informações da tabela: {e}")
-            return {}
+                return result
+            except ClientError as e:
+                logger.error(f"Erro ao obter informações da tabela: {e}")
+                return {}
 
     async def scan(
         self,
@@ -247,30 +261,57 @@ class DynamoClient:
         last_evaluated_key: Optional[Dict[str, Any]] = None,
         index_name: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        try:
-            scan_kwargs = {}
+        async with self.session.resource("dynamodb", region_name=self.region) as dynamodb:
+            table = await dynamodb.Table(self.table_name)
 
-            if filter_expression:
-                scan_kwargs["FilterExpression"] = filter_expression
-            if expression_values:
-                scan_kwargs["ExpressionAttributeValues"] = expression_values
-            if expression_names:
-                scan_kwargs["ExpressionAttributeNames"] = expression_names
-            if limit:
-                scan_kwargs["Limit"] = limit
-            if last_evaluated_key:
-                scan_kwargs["ExclusiveStartKey"] = last_evaluated_key
-            if index_name:
-                scan_kwargs["IndexName"] = index_name
+            try:
+                scan_kwargs = {}
 
-            response = self.table.scan(**scan_kwargs)
-            items = response.get("Items", [])
+                if filter_expression:
+                    scan_kwargs["FilterExpression"] = filter_expression
+                if expression_values:
+                    scan_kwargs["ExpressionAttributeValues"] = expression_values
+                if expression_names:
+                    scan_kwargs["ExpressionAttributeNames"] = expression_names
+                if limit:
+                    scan_kwargs["Limit"] = limit
+                if last_evaluated_key:
+                    scan_kwargs["ExclusiveStartKey"] = last_evaluated_key
+                if index_name:
+                    scan_kwargs["IndexName"] = index_name
 
-            converted_items = [self.convert_from_dynamo_item(item) for item in items]
+                response = await table.scan(**scan_kwargs)
+                items = response.get("Items", [])
+                converted_items = [self.convert_from_dynamo_item(item) for item in items]
+                logger.debug(f"Scan retornou {len(converted_items)} itens")
+                return converted_items
+            except Exception as e:
+                logger.error(f"Erro ao realizar scan: {e}")
+                raise
 
-            logger.info(f"Scan retornou {len(converted_items)} itens")
-            return converted_items
+    async def batch_get_items(self, keys: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        async with self.session.resource("dynamodb", region_name=self.region) as dynamodb:
+            try:
+                response = await dynamodb.batch_get_item(RequestItems={self.table_name: {"Keys": keys}})
 
-        except Exception as e:
-            logger.error(f"Erro ao realizar scan no DynamoDB: {e}")
-            raise
+                items = response.get("Responses", {}).get(self.table_name, [])
+                return [self.convert_from_dynamo_item(item) for item in items]
+            except Exception as e:
+                logger.error(f"Erro ao recuperar itens em lote: {e}")
+                raise
+
+    async def batch_write_items(self, items: List[Dict[str, Any]]) -> bool:
+        async with self.session.resource("dynamodb", region_name=self.region) as dynamodb:
+            table = await dynamodb.Table(self.table_name)
+
+            try:
+                async with table.batch_writer() as batch:
+                    for item in items:
+                        dynamo_item = floats_to_decimals(item)
+                        await batch.put_item(Item=dynamo_item)
+
+                logger.info(f"Batch write de {len(items)} itens concluído")
+                return True
+            except Exception as e:
+                logger.error(f"Erro ao escrever itens em lote: {e}")
+                return False
