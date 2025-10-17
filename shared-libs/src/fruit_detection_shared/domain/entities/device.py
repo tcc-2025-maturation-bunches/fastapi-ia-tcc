@@ -75,9 +75,9 @@ class Device:
 
     def increment_capture_count(self, success: bool = True):
         if success:
-            self.stats["successful_captures"] = self.stats["successful_captures"] + 1
+            self.stats["successful_captures"] += 1
         else:
-            self.stats["failed_captures"] = self.stats["failed_captures"] + 1
+            self.stats["failed_captures"] += 1
         self.stats["total_captures"] = self.stats["successful_captures"] + self.stats["failed_captures"]
         self.stats["last_capture_at"] = datetime.now(timezone.utc).isoformat()
         self.updated_at = datetime.now(timezone.utc)
