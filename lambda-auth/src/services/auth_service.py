@@ -13,15 +13,24 @@ logger = logging.getLogger(__name__)
 pwd_context = PasswordHash.recommended()
 
 
+
+import asyncio
+
 class AuthService:
     def __init__(self, repository: Optional[DynamoRepository] = None):
         self.repository = repository or DynamoRepository()
 
-    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        return pwd_context.verify(plain_password, hashed_password)
+    async def verify_password(self, plain_password: str, hashed_password: str) -> bool:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, lambda: pwd_context.verify(plain_password, hashed_password)
+        )
 
-    def get_password_hash(self, password: str) -> str:
-        return pwd_context.hash(password)
+    async def get_password_hash(self, password: str) -> str:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, lambda: pwd_context.hash(password)
+        )
 
     async def authenticate_user(self, username: str, password: str) -> Optional[Dict[str, str]]:
         try:
@@ -31,7 +40,7 @@ class AuthService:
                 logger.warning(f"Tentativa de login com username inválido: {username}")
                 return None
 
-            if not self.verify_password(password, user.get("password_hash", "")):
+            if not await self.verify_password(password, user.get("password_hash", "")):
                 logger.warning(f"Tentativa de login com senha inválida para usuário: {username}")
                 return None
 
