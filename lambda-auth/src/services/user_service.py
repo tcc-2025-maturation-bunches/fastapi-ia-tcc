@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -17,8 +18,9 @@ class UserService:
     def __init__(self, repository: Optional[DynamoRepository] = None):
         self.repository = repository or DynamoRepository()
 
-    def get_password_hash(self, password: str) -> str:
-        return pwd_context.hash(password)
+    async def get_password_hash(self, password: str) -> str:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, lambda: pwd_context.hash(password))
 
     async def create_user(self, username: str, password: str, name: str, email: str, user_type: str = "user") -> User:
         try:
@@ -28,7 +30,7 @@ class UserService:
                 raise ValueError(f"Usuário com username '{username}' já existe")
 
             user_id = str(uuid.uuid4())
-            password_hash = self.get_password_hash(password)
+            password_hash = await self.get_password_hash(password)
 
             now = datetime.now(timezone.utc)
 
@@ -111,7 +113,7 @@ class UserService:
             if email:
                 update_data["email"] = email
             if password:
-                update_data["password_hash"] = self.get_password_hash(password)
+                update_data["password_hash"] = await self.get_password_hash(password)
             if user_type:
                 update_data["user_type"] = user_type
 

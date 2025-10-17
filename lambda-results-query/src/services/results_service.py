@@ -238,10 +238,14 @@ class ResultsService:
             return None
 
     def _process_result_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        initial_metadata = item.get("initial_metadata", {})
+        location = initial_metadata.get("location") if initial_metadata else None
+
         processed_item = {
             "request_id": item.get("request_id"),
             "image_id": item.get("image_id"),
             "user_id": item.get("user_id"),
+            "location": location,
             "status": item.get("status"),
             "created_at": item.get("created_at"),
             "updated_at": item.get("updated_at"),
