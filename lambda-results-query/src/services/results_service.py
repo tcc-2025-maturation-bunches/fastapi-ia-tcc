@@ -5,6 +5,12 @@ from typing import Any, Dict, List, Optional
 from fruit_detection_shared.domain.entities import CombinedResult
 
 from src.repository.dynamo_repository import DynamoRepository
+from src.models.stats_models import (
+    InferenceStatsResponse,
+    LocationCountItem,
+    MaturationDistributionItem,
+    MaturationTrendItem,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -296,3 +302,124 @@ class ResultsService:
             )
 
         return list(reversed(daily_counts))
+
+    async def get_inference_stats(self, days: int = 7) -> Dict[str, Any]:
+        try:
+            logger.info(f"Gerando estatísticas de inferência dos últimos {days} dias")
+
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+            response = await self.dynamo_repository.get_results_with_filters(start_date=cutoff_date, limit=1000)
+
+            items = response.get("items", [])
+            total_inspections = len(items)
+
+            MATURATION_KEYS = ["verde", "quase_madura", "madura", "muito_madura", "passada"]
+            MATURATION_LABELS = {
+                "verde": "Verdes",
+                "quase_madura": "Quase Maduras",
+                "madura": "Maduras",
+                "muito_madura": "Muito Maduras",
+                "passada": "Passadas",
+            }
+            MATURATION_COLORS = {
+                "verde": "#22c55e",
+                "quase_madura": "#84cc16",
+                "madura": "#eab308",
+                "muito_madura": "#f97316",
+                "passada": "#ef4444",
+            }
+
+            maturation_counts = {key: 0 for key in MATURATION_KEYS}
+            trend_data: Dict[str, Dict[str, int]] = {}
+            location_data: Dict[str, Dict[str, int]] = {}
+            total_objects = 0
+
+            items.sort(key=lambda x: x.get("created_at", ""))
+
+            for item in items:
+                created_at_str = item.get("created_at")
+                day_str = "Unknown"
+                if created_at_str:
+                    try:
+                        created_dt = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+                        day_str = created_dt.strftime("%d/%m")
+                    except ValueError as ve:
+                        logger.warning(f"Formato de data inválido encontrado: {created_at_str}")
+
+                location = item.get("initial_metadata", {}).get("location", "Desconhecido")
+                if location not in location_data:
+                    location_data[location] = {"count": 0, **{k: 0 for k in MATURATION_KEYS}}
+                location_data[location]["count"] += 1
+
+                item_total_objects = 0
+                if item.get("detection_result") and item["detection_result"].get("summary"):
+                    summary_counts = item["detection_result"]["summary"].get("maturation_counts", {})
+                    if isinstance(summary_counts, dict):
+                        for key in MATURATION_KEYS:
+                            count = summary_counts.get(key, 0)
+                            maturation_counts[key] += count
+                            if day_str != "Unknown":
+                                if day_str not in trend_data:
+                                    trend_data[day_str] = {k: 0 for k in MATURATION_KEYS}
+                                    trend_data[day_str]["total"] = 0
+                                trend_data[day_str][key] += count
+                            location_data[location][key] += count
+                            item_total_objects += count
+                    else:
+                        results = item["detection_result"].get("results", [])
+                        if isinstance(results, list):
+                            for result in results:
+                                cat_info = result.get("maturation_level", {})
+                                if isinstance(cat_info, dict):
+                                    category = cat_info.get("category", "").lower()
+                                    if category in MATURATION_KEYS:
+                                        maturation_counts[category] += 1
+                                        if day_str != "Unknown":
+                                            if day_str not in trend_data:
+                                                trend_data[day_str] = {k: 0 for k in MATURATION_KEYS}
+                                                trend_data[day_str]["total"] = 0
+                                            trend_data[day_str][category] += 1
+                                        location_data[location][category] += 1
+                                        item_total_objects += 1
+                total_objects += item_total_objects
+                if day_str != "Unknown":
+                    if day_str not in trend_data:
+                        trend_data[day_str] = {k: 0 for k in MATURATION_KEYS}
+                        trend_data[day_str]["total"] = 0
+                    trend_data[day_str]["total"] += item_total_objects
+
+            maturation_distribution = [
+                MaturationDistributionItem(
+                    name=MATURATION_LABELS.get(key, key),
+                    value=maturation_counts[key],
+                    color=MATURATION_COLORS.get(key),
+                )
+                for key in MATURATION_KEYS
+            ]
+
+            maturation_trend = [
+                MaturationTrendItem(date=day, **counts)
+                for day, counts in sorted(trend_data.items())
+            ]
+
+            counts_by_location = [
+                LocationCountItem(location=loc, **counts)
+                for loc, counts in sorted(location_data.items(), key=lambda item: item[1]["count"], reverse=True)
+            ]
+
+            response_model = InferenceStatsResponse(
+                period_days=days,
+                total_inspections=total_inspections,
+                total_objects_detected=total_objects,
+                maturation_distribution=maturation_distribution,
+                maturation_trend=maturation_trend,
+                counts_by_location=counts_by_location,
+                generated_at=datetime.now(timezone.utc).isoformat(),
+            )
+
+            logger.info(f"Estatísticas de inferência geradas: {total_inspections} inspeções, {total_objects} objetos")
+            return response_model.model_dump()
+
+        except Exception as e:
+            logger.exception(f"Erro ao gerar estatísticas de inferência: {e}")
+            raise

@@ -107,74 +107,92 @@ class DynamoRepository:
         device_id: Optional[str] = None,
         exclude_errors: bool = False,
     ) -> Dict[str, Any]:
-        try:
-            if user_id:
-                query_result = await self.dynamo_client.query_with_pagination(
-                    key_name="user_id",
-                    key_value=user_id,
-                    index_name="UserIdIndex",
-                    limit=limit * 2,
-                    last_evaluated_key=last_evaluated_key,
-                    scan_index_forward=False,
-                )
-                items = query_result.get("items", [])
-                next_key = query_result.get("last_evaluated_key")
-            elif status_filter:
-                query_result = await self.dynamo_client.query_with_pagination(
-                    key_name="status",
-                    key_value=status_filter,
-                    index_name="StatusCreatedIndex",
-                    limit=limit * 2,
-                    last_evaluated_key=last_evaluated_key,
-                    scan_index_forward=False,
-                )
-                items = query_result.get("items", [])
-                next_key = query_result.get("last_evaluated_key")
-            else:
-                query_result = await self.dynamo_client.query_with_pagination(
-                    key_name="entity_type",
-                    key_value="COMBINED_RESULT",
-                    index_name="EntityTypeIndex",
-                    limit=limit * 2,
-                    last_evaluated_key=last_evaluated_key,
-                    scan_index_forward=False,
-                )
-                items = query_result.get("items", [])
-                next_key = query_result.get("last_evaluated_key")
+        logger.info(
+            f"Buscando resultados: limit={limit}, user={user_id}, "
+            f"device={device_id}, status={status_filter}, exclude_err={exclude_errors}"
+        )
+        accumulated_items: List[Dict[str, Any]] = []
+        current_last_key = last_evaluated_key
+        dynamo_query_count = 0
+        max_dynamo_queries = 10
 
-            filtered_items = []
-            for item in items:
-                if item.get("entity_type") != "COMBINED_RESULT":
-                    continue
+        while len(accumulated_items) < limit and dynamo_query_count < max_dynamo_queries:
+            dynamo_query_count += 1
+            logger.debug(f"Consulta DynamoDB #{dynamo_query_count}, last_key={current_last_key}")
 
-                item_status = item.get("status", "")
+            dynamo_limit = max(limit * 2, 50)
 
-                if exclude_errors and item_status == "error":
-                    continue
+            try:
+                if user_id:
+                    query_result = await self.dynamo_client.query_with_pagination(
+                        key_name="user_id",
+                        key_value=user_id,
+                        index_name="UserIdIndex",
+                        limit=dynamo_limit,
+                        last_evaluated_key=current_last_key,
+                        scan_index_forward=False,
+                    )
+                elif status_filter and not device_id and not exclude_errors:
+                    query_result = await self.dynamo_client.query_with_pagination(
+                        key_name="status",
+                        key_value=status_filter,
+                        index_name="StatusCreatedIndex",
+                        limit=dynamo_limit,
+                        last_evaluated_key=current_last_key,
+                        scan_index_forward=False,
+                    )
+                else:
+                    query_result = await self.dynamo_client.query_with_pagination(
+                        key_name="entity_type",
+                        key_value="COMBINED_RESULT",
+                        index_name="EntityTypeIndex",
+                        limit=dynamo_limit,
+                        last_evaluated_key=current_last_key,
+                        scan_index_forward=False,
+                    )
 
-                if status_filter and item_status != status_filter:
-                    continue
+                items_from_db = query_result.get("items", [])
+                dynamo_last_key = query_result.get("last_evaluated_key")
 
-                if device_id:
-                    item_device_id = None
-                    initial_metadata = item.get("initial_metadata", {})
-                    additional_metadata = item.get("additional_metadata", {})
-
-                    item_device_id = initial_metadata.get("device_id") or additional_metadata.get("device_id")
-
-                    if item_device_id != device_id:
+                for item in items_from_db:
+                    if item.get("entity_type") != "COMBINED_RESULT":
                         continue
 
-                filtered_items.append(self._format_result_item(item))
+                    item_status = item.get("status", "")
 
-                if len(filtered_items) >= limit:
+                    if exclude_errors and item_status in ["error", "failed"]:
+                        continue
+
+                    if status_filter and item_status != status_filter:
+                        continue
+
+                    if device_id:
+                        initial_metadata = item.get("initial_metadata", {})
+                        additional_metadata = item.get("additional_metadata", {})
+                        item_device_id = initial_metadata.get("device_id") or additional_metadata.get("device_id")
+
+                        if item_device_id != device_id:
+                            continue
+
+                    accumulated_items.append(self._format_result_item(item))
+
+                    if len(accumulated_items) >= limit:
+                        break
+
+                current_last_key = dynamo_last_key
+
+                if not current_last_key or len(accumulated_items) >= limit:
                     break
 
-            return {"items": filtered_items, "last_evaluated_key": next_key if len(filtered_items) >= limit else None}
+            except Exception as e:
+                logger.exception(f"Erro durante a consulta paginada ao DynamoDB: {e}")
+                raise
 
-        except Exception as e:
-            logger.exception(f"Erro ao buscar todos os resultados: {e}")
-            raise
+        next_api_key = current_last_key if len(accumulated_items) >= limit and current_last_key else None
+
+        logger.info(f"Retornando {len(accumulated_items)} resultados. Próxima chave API: {next_api_key is not None}")
+
+        return {"items": accumulated_items, "last_evaluated_key": next_api_key}
 
     async def get_results_with_filters(
         self,
