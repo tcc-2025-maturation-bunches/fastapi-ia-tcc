@@ -12,10 +12,9 @@ class MaturationDistributionItem(BaseModel):
 class MaturationTrendItem(BaseModel):
     date: str
     verde: int
-    quase_madura: int
-    madura: int
-    muito_madura: int
-    passada: int
+    quase_maduro: int
+    maduro: int
+    muito_maduro_ou_passado: int
     total: int
 
 
@@ -23,10 +22,9 @@ class LocationCountItem(BaseModel):
     location: str
     count: int
     verde: int
-    quase_madura: int
-    madura: int
-    muito_madura: int
-    passada: int
+    quase_maduro: int
+    maduro: int
+    muito_maduro_ou_passado: int
 
 
 class InferenceStatsResponse(BaseModel):

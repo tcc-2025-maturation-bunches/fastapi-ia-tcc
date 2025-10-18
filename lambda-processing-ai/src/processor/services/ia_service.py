@@ -207,10 +207,9 @@ class IAService:
                 ),
                 maturation_distribution=MaturationDistribution(
                     verde=int(mat_dist.get("verde", 0)),
-                    quase_madura=int(mat_dist.get("quase_madura", 0)),
-                    madura=int(mat_dist.get("madura", 0)),
-                    muito_madura=int(mat_dist.get("muito_madura", 0)),
-                    passada=int(mat_dist.get("passada", 0)),
+                    quase_maduro=int(mat_dist.get("quase_maduro", 0)),
+                    maduro=int(mat_dist.get("maduro", 0)),
+                    muito_maduro_ou_passado=int(mat_dist.get("muito_maduro_ou_passado", 0)),
                     nao_analisado=int(mat_dist.get("nao_analisado", 0)),
                 ),
             )
