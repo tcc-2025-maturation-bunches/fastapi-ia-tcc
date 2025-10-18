@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from src.app.config import settings
+from src.models.stats_models import InferenceStatsResponse
 from src.services.results_service import ResultsService
 from src.utils.validator import validate_device_id, validate_request_id, validate_user_id
 
@@ -210,4 +211,26 @@ async def get_user_stats(
         logger.exception(f"Erro ao obter estatísticas do usuário: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao obter estatísticas do usuário"
+        )
+
+
+@results_router.get(
+    "/stats/inference",
+    response_model=InferenceStatsResponse,
+    summary="Obter estatísticas de inferência para gráficos",
+    description="Agrega os resultados de inferência dos últimos N dias para alimentar os gráficos de maturação.",
+    tags=["Statistics", "Inference"],
+)
+async def get_inference_stats(
+    days: int = Query(7, ge=1, le=90, description="Número de dias para incluir na análise"),
+    results_service: ResultsService = Depends(get_results_service),
+):
+    try:
+        stats = await results_service.get_inference_stats(days=days)
+        return stats
+    except Exception as e:
+        logger.exception(f"Erro ao gerar estatísticas de inferência: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao gerar estatísticas de inferência: {str(e)}",
         )
