@@ -91,10 +91,9 @@ class ImageDimensions(BaseModel):
 
 class MaturationDistribution(BaseModel):
     verde: int = 0
-    quase_madura: int = 0
-    madura: int = 0
-    muito_madura: int = 0
-    passada: int = 0
+    quase_maduro: int = 0
+    maduro: int = 0
+    muito_maduro_ou_passado: int = 0
     nao_analisado: int = 0
 
 
