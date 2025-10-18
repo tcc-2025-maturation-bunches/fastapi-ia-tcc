@@ -81,13 +81,22 @@ class DeviceService:
                 return None
 
             if additional_data:
-                if "total_captures" in additional_data or "uptime_hours" in additional_data:
-                    updated_stats = device.stats.copy()
-                    if "total_captures" in additional_data:
-                        updated_stats["total_captures"] = additional_data["total_captures"]
-                    if "uptime_hours" in additional_data:
-                        updated_stats["uptime_hours"] = additional_data["uptime_hours"]
+                updated_stats = device.stats.copy()
+                stats_updated = False
 
+                if "uptime_hours" in additional_data:
+                    updated_stats["uptime_hours"] = additional_data["uptime_hours"]
+                    stats_updated = True
+
+                if "total_captures" in additional_data:
+                    logger.warning(
+                        f"Dispositivo {device_id} tentou atualizar total_captures via heartbeat. "
+                        f"Ignorando (valor local: {additional_data['total_captures']}, "
+                        f"valor servidor: {updated_stats.get('total_captures', 0)}). "
+                        "total_captures é calculado pelo servidor baseado em notificações SNS."
+                    )
+
+                if stats_updated:
                     await self.dynamo_repository.update_device_stats(device_id, updated_stats)
 
             logger.debug(f"Heartbeat processado: {device_id}")
@@ -154,15 +163,15 @@ class DeviceService:
 
             success = processing_result.get("success", False)
             device.increment_capture_count(success=success)
+            new_total = device.stats.get("total_captures", 0)
 
             if processing_result.get("processing_time_ms"):
                 current_avg = device.stats.get("average_processing_time_ms", 0)
-                total_captures = device.stats.get("total_captures", 1)
-                new_avg = (
-                    (current_avg * (total_captures - 1)) + processing_result["processing_time_ms"]
-                ) / total_captures
-                device.stats["average_processing_time_ms"] = int(new_avg)
-
+                if new_total > 0:
+                    new_avg = ((current_avg * (new_total - 1)) + processing_result["processing_time_ms"]) / new_total
+                    device.stats["average_processing_time_ms"] = int(new_avg)
+                else:
+                    device.stats["average_processing_time_ms"] = int(processing_result["processing_time_ms"])
             await self.dynamo_repository.save_device(device)
             logger.info(f"Estatísticas atualizadas: {device_id}")
             return True
