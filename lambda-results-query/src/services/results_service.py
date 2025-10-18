@@ -4,13 +4,13 @@ from typing import Any, Dict, List, Optional
 
 from fruit_detection_shared.domain.entities import CombinedResult
 
-from src.repository.dynamo_repository import DynamoRepository
 from src.models.stats_models import (
     InferenceStatsResponse,
     LocationCountItem,
     MaturationDistributionItem,
     MaturationTrendItem,
 )
+from src.repository.dynamo_repository import DynamoRepository
 
 logger = logging.getLogger(__name__)
 
@@ -343,7 +343,7 @@ class ResultsService:
                     try:
                         created_dt = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
                         day_str = created_dt.strftime("%d/%m")
-                    except ValueError as ve:
+                    except ValueError:
                         logger.warning(f"Formato de data inválido encontrado: {created_at_str}")
 
                 location = item.get("initial_metadata", {}).get("location", "Desconhecido")
@@ -397,10 +397,7 @@ class ResultsService:
                 for key in MATURATION_KEYS
             ]
 
-            maturation_trend = [
-                MaturationTrendItem(date=day, **counts)
-                for day, counts in sorted(trend_data.items())
-            ]
+            maturation_trend = [MaturationTrendItem(date=day, **counts) for day, counts in sorted(trend_data.items())]
 
             counts_by_location = [
                 LocationCountItem(location=loc, **counts)
