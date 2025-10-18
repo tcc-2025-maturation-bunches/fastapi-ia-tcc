@@ -187,10 +187,9 @@ class CombinedResult:
             if maturation_dist:
                 maturation_dist_normalized = {
                     "verde": int(maturation_dist.get("verde", 0)),
-                    "quase_madura": int(maturation_dist.get("quase_madura", 0)),
-                    "madura": int(maturation_dist.get("madura", 0)),
-                    "muito_madura": int(maturation_dist.get("muito_madura", 0)),
-                    "passada": int(maturation_dist.get("passada", 0)),
+                    "quase_maduro": int(maturation_dist.get("quase_maduro", 0)),
+                    "maduro": int(maturation_dist.get("maduro", 0)),
+                    "muito_maduro_ou_passado": int(maturation_dist.get("muito_maduro_ou_passado", 0)),
                     "nao_analisado": int(maturation_dist.get("nao_analisado", 0)),
                 }
 

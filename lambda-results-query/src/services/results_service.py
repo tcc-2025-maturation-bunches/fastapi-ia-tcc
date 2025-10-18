@@ -313,20 +313,18 @@ class ResultsService:
             items = response.get("items", [])
             total_inspections = len(items)
 
-            MATURATION_KEYS = ["verde", "quase_madura", "madura", "muito_madura", "passada"]
+            MATURATION_KEYS = ["verde", "quase_maduro", "maduro", "muito_maduro_ou_passado"]
             MATURATION_LABELS = {
                 "verde": "Verdes",
-                "quase_madura": "Quase Maduras",
-                "madura": "Maduras",
-                "muito_madura": "Muito Maduras",
-                "passada": "Passadas",
+                "quase_maduro": "Quase Maduros",
+                "maduro": "Maduros",
+                "muito_maduro_ou_passado": "Muito Maduros ou Passados",
             }
             MATURATION_COLORS = {
                 "verde": "#22c55e",
-                "quase_madura": "#84cc16",
-                "madura": "#eab308",
-                "muito_madura": "#f97316",
-                "passada": "#ef4444",
+                "quase_maduro": "#84cc16",
+                "maduro": "#eab308",
+                "muito_maduro_ou_passado": "#ef4444",
             }
 
             maturation_counts = {key: 0 for key in MATURATION_KEYS}
@@ -351,38 +349,32 @@ class ResultsService:
                     location_data[location] = {"count": 0, **{k: 0 for k in MATURATION_KEYS}}
                 location_data[location]["count"] += 1
 
+                maturation_distribution = {}
+                processing_metadata = item.get("processing_metadata")
+                if processing_metadata and isinstance(processing_metadata, dict):
+                    maturation_distribution = processing_metadata.get("maturation_distribution", {})
+                if not maturation_distribution:
+                    detection_result = item.get("detection_result", {})
+                    summary = detection_result.get("summary", {})
+                    maturation_distribution = summary.get("maturation_counts", {})
+
                 item_total_objects = 0
-                if item.get("detection_result") and item["detection_result"].get("summary"):
-                    summary_counts = item["detection_result"]["summary"].get("maturation_counts", {})
-                    if isinstance(summary_counts, dict):
-                        for key in MATURATION_KEYS:
-                            count = summary_counts.get(key, 0)
-                            maturation_counts[key] += count
-                            if day_str != "Unknown":
-                                if day_str not in trend_data:
-                                    trend_data[day_str] = {k: 0 for k in MATURATION_KEYS}
-                                    trend_data[day_str]["total"] = 0
-                                trend_data[day_str][key] += count
-                            location_data[location][key] += count
-                            item_total_objects += count
-                    else:
-                        results = item["detection_result"].get("results", [])
-                        if isinstance(results, list):
-                            for result in results:
-                                cat_info = result.get("maturation_level", {})
-                                if isinstance(cat_info, dict):
-                                    category = cat_info.get("category", "").lower()
-                                    if category in MATURATION_KEYS:
-                                        maturation_counts[category] += 1
-                                        if day_str != "Unknown":
-                                            if day_str not in trend_data:
-                                                trend_data[day_str] = {k: 0 for k in MATURATION_KEYS}
-                                                trend_data[day_str]["total"] = 0
-                                            trend_data[day_str][category] += 1
-                                        location_data[location][category] += 1
-                                        item_total_objects += 1
+                if maturation_distribution and isinstance(maturation_distribution, dict):
+                    for key in MATURATION_KEYS:
+                        count = maturation_distribution.get(key, 0)
+                        maturation_counts[key] += count
+
+                        if day_str != "Unknown":
+                            if day_str not in trend_data:
+                                trend_data[day_str] = {k: 0 for k in MATURATION_KEYS}
+                                trend_data[day_str]["total"] = 0
+                            trend_data[day_str][key] += count
+
+                        location_data[location][key] += count
+                        item_total_objects += count
+
                 total_objects += item_total_objects
-                if day_str != "Unknown":
+                if day_str != "Unknown" and item_total_objects > 0:
                     if day_str not in trend_data:
                         trend_data[day_str] = {k: 0 for k in MATURATION_KEYS}
                         trend_data[day_str]["total"] = 0
