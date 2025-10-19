@@ -58,6 +58,8 @@ class ResultsService:
         status_filter: Optional[str] = None,
         user_id: Optional[str] = None,
         device_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
         exclude_errors: bool = False,
     ) -> Dict[str, Any]:
         try:
@@ -72,6 +74,8 @@ class ResultsService:
                 status_filter=status_filter,
                 user_id=user_id,
                 device_id=device_id,
+                start_date=start_date,
+                end_date=end_date,
                 exclude_errors=exclude_errors,
             )
             total_count = total_count_result.get("total_count", 0)
@@ -89,6 +93,8 @@ class ResultsService:
                 status_filter=status_filter,
                 user_id=user_id,
                 device_id=device_id,
+                start_date=start_date,
+                end_date=end_date,
                 exclude_errors=exclude_errors,
             )
 
@@ -115,6 +121,8 @@ class ResultsService:
                     "status_filter": status_filter,
                     "user_id": user_id,
                     "device_id": device_id,
+                    "start_date": start_date.isoformat() if start_date is not None else None,
+                    "end_date": end_date.isoformat() if end_date is not None else None,
                     "exclude_errors": exclude_errors,
                 },
             }
