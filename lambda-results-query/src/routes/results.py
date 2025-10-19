@@ -1,10 +1,12 @@
 import logging
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from src.app.config import settings
+from src.models.filter_models import DateRangeFilter
 from src.models.stats_models import InferenceStatsResponse
 from src.services.results_service import ResultsService
 from src.utils.validator import validate_device_id, validate_request_id, validate_user_id
@@ -129,11 +131,17 @@ async def get_all_results(
     status_filter: Optional[str] = Query(None, description="Filtrar por status"),
     user_id: Optional[str] = Query(None, description="Filtrar por user_id"),
     device_id: Optional[str] = Query(None, description="Filtrar por device_id"),
+    start_date: Optional[datetime] = Query(
+        None, description="Data inicial (ISO 8601: YYYY-MM-DD ou YYYY-MM-DDTHH:MM:SS)"
+    ),
+    end_date: Optional[datetime] = Query(None, description="Data final (ISO 8601: YYYY-MM-DD ou YYYY-MM-DDTHH:MM:SS)"),
     exclude_errors: bool = Query(False, description="Excluir resultados com erro"),
     results_service: ResultsService = Depends(get_results_service),
 ):
     try:
         validated_device_id = validate_device_id(device_id) if device_id else None
+
+        date_range_filter = DateRangeFilter(start_date=start_date, end_date=end_date)
 
         result = await results_service.get_all_results(
             page=page,
@@ -141,6 +149,8 @@ async def get_all_results(
             status_filter=status_filter,
             user_id=user_id,
             device_id=validated_device_id,
+            start_date=date_range_filter.start_date,
+            end_date=date_range_filter.end_date,
             exclude_errors=exclude_errors,
         )
 
