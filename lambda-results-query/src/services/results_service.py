@@ -53,19 +53,39 @@ class ResultsService:
 
     async def get_all_results(
         self,
-        limit: int = 20,
-        last_evaluated_key: Optional[Dict[str, Any]] = None,
+        page: int = 1,
+        page_size: int = 20,
         status_filter: Optional[str] = None,
         user_id: Optional[str] = None,
         device_id: Optional[str] = None,
         exclude_errors: bool = False,
     ) -> Dict[str, Any]:
         try:
-            logger.info(f"Recuperando todos os resultados (limit: {limit})")
+            logger.info(f"Recuperando página {page} com {page_size} itens por página")
 
-            response = await self.dynamo_repository.get_all_results(
-                limit=limit,
-                last_evaluated_key=last_evaluated_key,
+            if page < 1:
+                page = 1
+            if page_size < 1:
+                page_size = 20
+
+            total_count_result = await self.dynamo_repository.count_all_results(
+                status_filter=status_filter,
+                user_id=user_id,
+                device_id=device_id,
+                exclude_errors=exclude_errors,
+            )
+            total_count = total_count_result.get("total_count", 0)
+
+            total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 1
+
+            if page > total_pages:
+                page = total_pages
+
+            offset = (page - 1) * page_size
+
+            response = await self.dynamo_repository.get_all_results_with_offset(
+                offset=offset,
+                limit=page_size,
                 status_filter=status_filter,
                 user_id=user_id,
                 device_id=device_id,
@@ -73,20 +93,24 @@ class ResultsService:
             )
 
             items = response.get("items", [])
-            next_key = response.get("last_evaluated_key")
 
             processed_items = []
             for item in items:
                 processed_item = self._process_result_item(item)
                 processed_items.append(processed_item)
 
-            logger.info(f"Recuperados {len(processed_items)} resultados")
+            logger.info(
+                f"Página {page}/{total_pages} recuperada com {len(processed_items)} itens " f"(total: {total_count})"
+            )
 
             return {
                 "items": processed_items,
-                "next_page_key": next_key,
-                "total_count": len(processed_items),
-                "has_more": next_key is not None,
+                "total_count": total_count,
+                "total_pages": total_pages,
+                "current_page": page,
+                "page_size": page_size,
+                "has_previous": page > 1,
+                "has_next": page < total_pages,
                 "filters_applied": {
                     "status_filter": status_filter,
                     "user_id": user_id,
@@ -96,7 +120,7 @@ class ResultsService:
             }
 
         except Exception as e:
-            logger.exception(f"Erro ao recuperar todos os resultados: {e}")
+            logger.exception(f"Erro ao recuperar resultados paginados: {e}")
             raise
 
     async def get_results_summary(self, days: int = 7, device_id: Optional[str] = None) -> Dict[str, Any]:

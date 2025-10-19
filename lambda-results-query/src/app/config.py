@@ -12,6 +12,8 @@ class Settings:
         self.SERVICE_VERSION = "1.0.0"
 
         self.DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", f"fruit-detection-{self.ENVIRONMENT}-results")
+        self.DYNAMODB_FETCH_BUFFER_SIZE = int(os.getenv("DYNAMODB_FETCH_BUFFER_SIZE", "100"))
+        self.DYNAMODB_MAX_SCAN_LIMIT = int(os.getenv("DYNAMODB_MAX_SCAN_LIMIT", "1000"))
         self.S3_RESULTS_BUCKET = os.getenv("S3_RESULTS_BUCKET", f"fruit-detection-{self.ENVIRONMENT}-results")
 
         self.MAX_QUERY_LIMIT = int(os.getenv("MAX_QUERY_LIMIT", "200"))

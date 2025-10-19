@@ -1,5 +1,3 @@
-import base64
-import json
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -19,9 +17,11 @@ results_router = APIRouter()
 class PaginatedResultsResponse(BaseModel):
     items: List[Dict[str, Any]]
     total_count: int
-    has_more: bool
-    next_page_token: Optional[str] = None
-    current_page_size: int
+    total_pages: int
+    current_page: int
+    page_size: int
+    has_previous: bool
+    has_next: bool
     filters_applied: Dict[str, Any]
 
 
@@ -122,8 +122,10 @@ async def get_results_by_device_id(
 
 @results_router.get("/all", response_model=PaginatedResultsResponse)
 async def get_all_results(
-    limit: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_QUERY_LIMIT),
-    page_token: Optional[str] = Query(None, description="Token para paginação"),
+    page: int = Query(1, ge=1, description="Número da página (começando em 1)"),
+    page_size: int = Query(
+        settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_QUERY_LIMIT, description="Itens por página"
+    ),
     status_filter: Optional[str] = Query(None, description="Filtrar por status"),
     user_id: Optional[str] = Query(None, description="Filtrar por user_id"),
     device_id: Optional[str] = Query(None, description="Filtrar por device_id"),
@@ -131,40 +133,25 @@ async def get_all_results(
     results_service: ResultsService = Depends(get_results_service),
 ):
     try:
-        last_evaluated_key = None
-        if page_token:
-            try:
-                decoded_token = base64.b64decode(page_token.encode()).decode()
-                last_evaluated_key = json.loads(decoded_token)
-            except Exception as e:
-                logger.warning(f"Token de página inválido: {e}")
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token de página inválido")
-
         validated_device_id = validate_device_id(device_id) if device_id else None
 
         result = await results_service.get_all_results(
-            limit=limit,
-            last_evaluated_key=last_evaluated_key,
+            page=page,
+            page_size=page_size,
             status_filter=status_filter,
             user_id=user_id,
             device_id=validated_device_id,
             exclude_errors=exclude_errors,
         )
 
-        next_page_token = None
-        if result["next_page_key"]:
-            try:
-                token_json = json.dumps(result["next_page_key"])
-                next_page_token = base64.b64encode(token_json.encode()).decode()
-            except Exception as e:
-                logger.warning(f"Erro ao codificar token de página: {e}")
-
         return PaginatedResultsResponse(
             items=result["items"],
             total_count=result["total_count"],
-            has_more=result["has_more"],
-            next_page_token=next_page_token,
-            current_page_size=len(result["items"]),
+            total_pages=result["total_pages"],
+            current_page=result["current_page"],
+            page_size=result["page_size"],
+            has_previous=result["has_previous"],
+            has_next=result["has_next"],
             filters_applied=result.get("filters_applied", {}),
         )
 
