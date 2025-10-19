@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fruit_detection_shared.infra.external import DynamoClient
@@ -105,12 +105,14 @@ class DynamoRepository:
         status_filter: Optional[str] = None,
         user_id: Optional[str] = None,
         device_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
         exclude_errors: bool = False,
     ) -> Dict[str, Any]:
         try:
             logger.info(
                 f"Contando resultados: user={user_id}, device={device_id}, "
-                f"status={status_filter}, exclude_err={exclude_errors}"
+                f"status={status_filter}, start={start_date}, end={end_date}, exclude_err={exclude_errors}"
             )
 
             filter_expressions = ["entity_type = :entity_type"]
@@ -128,6 +130,14 @@ class DynamoRepository:
                 expression_values[":failed_status"] = "failed"
                 expression_names["#status"] = "status"
 
+            if start_date:
+                filter_expressions.append("created_at >= :start_date")
+                expression_values[":start_date"] = start_date.isoformat()
+
+            if end_date:
+                filter_expressions.append("created_at <= :end_date")
+                expression_values[":end_date"] = end_date.isoformat()
+
             if device_id:
                 filter_expressions.append(
                     "(initial_metadata.device_id = :device_id OR additional_metadata.device_id = :device_id)"
@@ -135,7 +145,9 @@ class DynamoRepository:
                 expression_values[":device_id"] = device_id
 
             if user_id:
-                count_via_index = await self._count_via_user_index(user_id, status_filter, device_id, exclude_errors)
+                count_via_index = await self._count_via_user_index(
+                    user_id, status_filter, device_id, start_date, end_date, exclude_errors
+                )
                 return {"total_count": count_via_index}
 
             items = await self.dynamo_client.scan(
@@ -159,6 +171,8 @@ class DynamoRepository:
         user_id: str,
         status_filter: Optional[str] = None,
         device_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
         exclude_errors: bool = False,
     ) -> int:
         try:
@@ -172,32 +186,88 @@ class DynamoRepository:
 
             count = 0
             for item in items:
-                if item.get("entity_type") != "COMBINED_RESULT":
-                    continue
-
-                item_status = item.get("status", "")
-
-                if exclude_errors and item_status in ["error", "failed"]:
-                    continue
-
-                if status_filter and item_status != status_filter:
-                    continue
-
-                if device_id:
-                    initial_metadata = item.get("initial_metadata", {})
-                    additional_metadata = item.get("additional_metadata", {})
-                    item_device_id = initial_metadata.get("device_id") or additional_metadata.get("device_id")
-
-                    if item_device_id != device_id:
-                        continue
-
-                count += 1
+                if self._matches_all_filters(item, status_filter, device_id, start_date, end_date, exclude_errors):
+                    count += 1
 
             return count
-
         except Exception as e:
             logger.exception(f"Erro ao contar via user index: {e}")
             raise
+
+    def _matches_status_filter(self, item: Dict[str, Any], status_filter: Optional[str], exclude_errors: bool) -> bool:
+        if not status_filter and not exclude_errors:
+            return True
+
+        item_status = item.get("status", "")
+
+        if exclude_errors and item_status in ["error", "failed"]:
+            return False
+
+        if status_filter and item_status != status_filter:
+            return False
+
+        return True
+
+    def _matches_date_range(
+        self, item: Dict[str, Any], start_date: Optional[datetime], end_date: Optional[datetime]
+    ) -> bool:
+        if not start_date and not end_date:
+            return True
+
+        created_at_str = item.get("created_at")
+        if not created_at_str:
+            return False
+
+        try:
+            created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+
+            if not created_at.tzinfo:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+
+            if start_date:
+                start_date_aware = start_date if start_date.tzinfo else start_date.replace(tzinfo=timezone.utc)
+                if created_at < start_date_aware:
+                    return False
+
+            if end_date:
+                end_date_aware = end_date if end_date.tzinfo else end_date.replace(tzinfo=timezone.utc)
+                if created_at > end_date_aware:
+                    return False
+
+            return True
+        except ValueError:
+            return False
+
+    def _matches_device_id(self, item: Dict[str, Any], device_id: Optional[str]) -> bool:
+        if not device_id:
+            return True
+
+        initial_metadata = item.get("initial_metadata", {})
+        additional_metadata = item.get("additional_metadata", {})
+        item_device_id = initial_metadata.get("device_id") or additional_metadata.get("device_id")
+
+        return item_device_id == device_id
+
+    def _calculate_batch_limit(self, needed_items: int, filtered_count: int, items_skipped: int) -> int:
+        remaining_items = needed_items - filtered_count - items_skipped
+        batch_size = remaining_items + self.fetch_buffer_size
+        return min(self.max_scan_limit, max(1, batch_size))
+
+    def _should_use_status_index(
+        self,
+        status_filter: Optional[str],
+        device_id: Optional[str],
+        start_date: Optional[datetime],
+        end_date: Optional[datetime],
+        exclude_errors: bool,
+    ) -> bool:
+        return (
+            status_filter is not None
+            and device_id is None
+            and start_date is None
+            and end_date is None
+            and not exclude_errors
+        )
 
     async def get_all_results_with_offset(
         self,
@@ -206,24 +276,27 @@ class DynamoRepository:
         status_filter: Optional[str] = None,
         user_id: Optional[str] = None,
         device_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
         exclude_errors: bool = False,
     ) -> Dict[str, Any]:
         try:
             logger.info(
                 f"Buscando resultados: offset={offset}, limit={limit}, user={user_id}, "
-                f"device={device_id}, status={status_filter}, exclude_err={exclude_errors}"
+                f"device={device_id}, status={status_filter}, start={start_date}, end={end_date}, "
+                f"exclude_err={exclude_errors}"
             )
 
             if user_id:
                 return await self._get_results_via_user_index(
-                    user_id, offset, limit, status_filter, device_id, exclude_errors
+                    user_id, offset, limit, status_filter, device_id, start_date, end_date, exclude_errors
                 )
 
-            if status_filter and not device_id and not exclude_errors:
+            if self._should_use_status_index(status_filter, device_id, start_date, end_date, exclude_errors):
                 return await self._get_results_via_status_index(status_filter, offset, limit)
 
             return await self._get_results_via_entity_type_index(
-                offset, limit, status_filter, device_id, exclude_errors
+                offset, limit, status_filter, device_id, start_date, end_date, exclude_errors
             )
 
         except Exception as e:
@@ -236,17 +309,18 @@ class DynamoRepository:
         limit: int,
         status_filter: Optional[str] = None,
         device_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
         exclude_errors: bool = False,
     ) -> Dict[str, Any]:
         try:
-            fetch_limit = offset + limit + self.fetch_buffer_size
-
-            all_items = []
+            filtered_items = []
             last_key = None
-            total_fetched = 0
+            total_filtered = 0
+            needed_items = offset + limit
 
-            while total_fetched < fetch_limit:
-                batch_limit = min(1000, fetch_limit - total_fetched)
+            while total_filtered < needed_items:
+                batch_limit = min(self.max_scan_limit, needed_items - total_filtered + self.fetch_buffer_size)
 
                 query_result = await self.dynamo_client.query_with_pagination(
                     key_name="entity_type",
@@ -261,40 +335,35 @@ class DynamoRepository:
                 if not items:
                     break
 
-                all_items.extend(items)
-                total_fetched += len(items)
+                for item in items:
+                    if total_filtered >= needed_items:
+                        break
+
+                    if item.get("entity_type") != "COMBINED_RESULT":
+                        continue
+
+                    if not self._matches_status_filter(item, status_filter, exclude_errors):
+                        continue
+
+                    if not self._matches_date_range(item, start_date, end_date):
+                        continue
+
+                    if not self._matches_device_id(item, device_id):
+                        continue
+
+                    filtered_items.append(item)
+                    total_filtered += 1
 
                 last_key = query_result.get("last_evaluated_key")
                 if not last_key:
                     break
 
-            filtered_items = []
-            for item in all_items:
-                if item.get("entity_type") != "COMBINED_RESULT":
-                    continue
-
-                item_status = item.get("status", "")
-
-                if exclude_errors and item_status in ["error", "failed"]:
-                    continue
-
-                if status_filter and item_status != status_filter:
-                    continue
-
-                if device_id:
-                    initial_metadata = item.get("initial_metadata", {})
-                    additional_metadata = item.get("additional_metadata", {})
-                    item_device_id = initial_metadata.get("device_id") or additional_metadata.get("device_id")
-
-                    if item_device_id != device_id:
-                        continue
-
-                filtered_items.append(item)
-
             paginated_items = filtered_items[offset : offset + limit]
             formatted_items = [self._format_result_item(item) for item in paginated_items]
 
-            logger.info(f"Retornando {len(formatted_items)} resultados (offset={offset})")
+            logger.info(
+                f"Retornando {len(formatted_items)} resultados (offset={offset}, " f"total_filtered={total_filtered})"
+            )
 
             return {"items": formatted_items}
 
@@ -316,7 +385,7 @@ class DynamoRepository:
             total_fetched = 0
 
             while total_fetched < fetch_limit:
-                batch_limit = min(1000, fetch_limit - total_fetched)
+                batch_limit = min(self.max_scan_limit, fetch_limit - total_fetched)
 
                 query_result = await self.dynamo_client.query_with_pagination(
                     key_name="status",
@@ -357,17 +426,19 @@ class DynamoRepository:
         limit: int,
         status_filter: Optional[str] = None,
         device_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
         exclude_errors: bool = False,
     ) -> Dict[str, Any]:
         try:
-            fetch_limit = offset + limit + self.fetch_buffer_size
-
-            all_items = []
+            filtered_items = []
+            filtered_count = 0  # Track count separately for performance
+            items_skipped = 0
             last_key = None
-            total_fetched = 0
+            needed_items = offset + limit
 
-            while total_fetched < fetch_limit:
-                batch_limit = min(1000, fetch_limit - total_fetched)
+            while filtered_count < limit:
+                batch_limit = self._calculate_batch_limit(needed_items, filtered_count, items_skipped)
 
                 query_result = await self.dynamo_client.query_with_pagination(
                     key_name="user_id",
@@ -382,40 +453,33 @@ class DynamoRepository:
                 if not items:
                     break
 
-                all_items.extend(items)
-                total_fetched += len(items)
+                for item in items:
+                    if filtered_count >= limit:
+                        break
 
-                last_key = query_result.get("last_evaluated_key")
-                if not last_key:
-                    break
-
-            filtered_items = []
-            for item in all_items:
-                if item.get("entity_type") != "COMBINED_RESULT":
-                    continue
-
-                item_status = item.get("status", "")
-
-                if exclude_errors and item_status in ["error", "failed"]:
-                    continue
-
-                if status_filter and item_status != status_filter:
-                    continue
-
-                if device_id:
-                    initial_metadata = item.get("initial_metadata", {})
-                    additional_metadata = item.get("additional_metadata", {})
-                    item_device_id = initial_metadata.get("device_id") or additional_metadata.get("device_id")
-
-                    if item_device_id != device_id:
+                    if not self._matches_all_filters(
+                        item, status_filter, device_id, start_date, end_date, exclude_errors
+                    ):
                         continue
 
-                filtered_items.append(item)
+                    if items_skipped < offset:
+                        items_skipped += 1
+                        continue
 
-            paginated_items = filtered_items[offset : offset + limit]
-            formatted_items = [self._format_result_item(item) for item in paginated_items]
+                    filtered_items.append(item)
+                    filtered_count += 1
 
-            logger.info(f"Retornando {len(formatted_items)} resultados via user index (offset={offset})")
+                last_key = query_result.get("last_evaluated_key")
+
+                if not last_key or filtered_count >= limit:
+                    break
+
+            formatted_items = [self._format_result_item(item) for item in filtered_items]
+
+            logger.info(
+                f"Retornando {len(formatted_items)} resultados via user index (offset={offset}, "
+                f"items_skipped={items_skipped})"
+            )
 
             return {"items": formatted_items}
 
@@ -495,3 +559,26 @@ class DynamoRepository:
             "additional_metadata": item.get("additional_metadata"),
             "error_info": item.get("error_info"),
         }
+
+    def _matches_all_filters(
+        self,
+        item: Dict[str, Any],
+        status_filter: Optional[str] = None,
+        device_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        exclude_errors: bool = False,
+    ) -> bool:
+        if item.get("entity_type") != "COMBINED_RESULT":
+            return False
+
+        if not self._matches_status_filter(item, status_filter, exclude_errors):
+            return False
+
+        if not self._matches_date_range(item, start_date, end_date):
+            return False
+
+        if not self._matches_device_id(item, device_id):
+            return False
+
+        return True
