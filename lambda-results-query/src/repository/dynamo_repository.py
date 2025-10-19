@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 class DynamoRepository:
     def __init__(self, dynamo_client: Optional[DynamoClient] = None):
         self.dynamo_client = dynamo_client or DynamoClient(table_name=settings.DYNAMODB_TABLE_NAME)
+        self.fetch_buffer_size = settings.DYNAMODB_FETCH_BUFFER_SIZE
+        self.max_scan_limit = settings.DYNAMODB_MAX_SCAN_LIMIT
 
     async def get_result_by_request_id(self, request_id: str) -> Optional[Dict[str, Any]]:
         try:
@@ -98,101 +100,328 @@ class DynamoRepository:
             logger.exception(f"Erro ao buscar resultados por device_id: {e}")
             raise
 
-    async def get_all_results(
+    async def count_all_results(
         self,
-        limit: int = 20,
-        last_evaluated_key: Optional[Dict[str, Any]] = None,
         status_filter: Optional[str] = None,
         user_id: Optional[str] = None,
         device_id: Optional[str] = None,
         exclude_errors: bool = False,
     ) -> Dict[str, Any]:
-        logger.info(
-            f"Buscando resultados: limit={limit}, user={user_id}, "
-            f"device={device_id}, status={status_filter}, exclude_err={exclude_errors}"
-        )
-        accumulated_items: List[Dict[str, Any]] = []
-        current_last_key = last_evaluated_key
-        dynamo_query_count = 0
-        max_dynamo_queries = 10
+        try:
+            logger.info(
+                f"Contando resultados: user={user_id}, device={device_id}, "
+                f"status={status_filter}, exclude_err={exclude_errors}"
+            )
 
-        while len(accumulated_items) < limit and dynamo_query_count < max_dynamo_queries:
-            dynamo_query_count += 1
-            logger.debug(f"Consulta DynamoDB #{dynamo_query_count}, last_key={current_last_key}")
+            filter_expressions = ["entity_type = :entity_type"]
+            expression_values = {":entity_type": "COMBINED_RESULT"}
+            expression_names = {}
 
-            dynamo_limit = max(limit * 2, 50)
+            if status_filter:
+                filter_expressions.append("#status = :status")
+                expression_values[":status"] = status_filter
+                expression_names["#status"] = "status"
 
-            try:
-                if user_id:
-                    query_result = await self.dynamo_client.query_with_pagination(
-                        key_name="user_id",
-                        key_value=user_id,
-                        index_name="UserIdIndex",
-                        limit=dynamo_limit,
-                        last_evaluated_key=current_last_key,
-                        scan_index_forward=False,
-                    )
-                elif status_filter and not device_id and not exclude_errors:
-                    query_result = await self.dynamo_client.query_with_pagination(
-                        key_name="status",
-                        key_value=status_filter,
-                        index_name="StatusCreatedIndex",
-                        limit=dynamo_limit,
-                        last_evaluated_key=current_last_key,
-                        scan_index_forward=False,
-                    )
-                else:
-                    query_result = await self.dynamo_client.query_with_pagination(
-                        key_name="entity_type",
-                        key_value="COMBINED_RESULT",
-                        index_name="EntityTypeIndex",
-                        limit=dynamo_limit,
-                        last_evaluated_key=current_last_key,
-                        scan_index_forward=False,
-                    )
+            if exclude_errors:
+                filter_expressions.append("#status <> :error_status AND #status <> :failed_status")
+                expression_values[":error_status"] = "error"
+                expression_values[":failed_status"] = "failed"
+                expression_names["#status"] = "status"
 
-                items_from_db = query_result.get("items", [])
-                dynamo_last_key = query_result.get("last_evaluated_key")
+            if device_id:
+                filter_expressions.append(
+                    "(initial_metadata.device_id = :device_id OR additional_metadata.device_id = :device_id)"
+                )
+                expression_values[":device_id"] = device_id
 
-                for item in items_from_db:
-                    if item.get("entity_type") != "COMBINED_RESULT":
+            if user_id:
+                count_via_index = await self._count_via_user_index(user_id, status_filter, device_id, exclude_errors)
+                return {"total_count": count_via_index}
+
+            items = await self.dynamo_client.scan(
+                filter_expression=" AND ".join(filter_expressions),
+                expression_values=expression_values,
+                expression_names=expression_names if expression_names else None,
+                limit=self.max_scan_limit,
+            )
+
+            total_count = len(items)
+            logger.info(f"Total de resultados contados: {total_count}")
+
+            return {"total_count": total_count}
+
+        except Exception as e:
+            logger.exception(f"Erro ao contar resultados: {e}")
+            raise
+
+    async def _count_via_user_index(
+        self,
+        user_id: str,
+        status_filter: Optional[str] = None,
+        device_id: Optional[str] = None,
+        exclude_errors: bool = False,
+    ) -> int:
+        try:
+            items = await self.dynamo_client.query_items(
+                key_name="user_id",
+                key_value=user_id,
+                index_name="UserIdIndex",
+                limit=self.max_scan_limit,
+                scan_index_forward=False,
+            )
+
+            count = 0
+            for item in items:
+                if item.get("entity_type") != "COMBINED_RESULT":
+                    continue
+
+                item_status = item.get("status", "")
+
+                if exclude_errors and item_status in ["error", "failed"]:
+                    continue
+
+                if status_filter and item_status != status_filter:
+                    continue
+
+                if device_id:
+                    initial_metadata = item.get("initial_metadata", {})
+                    additional_metadata = item.get("additional_metadata", {})
+                    item_device_id = initial_metadata.get("device_id") or additional_metadata.get("device_id")
+
+                    if item_device_id != device_id:
                         continue
 
-                    item_status = item.get("status", "")
+                count += 1
 
-                    if exclude_errors and item_status in ["error", "failed"]:
-                        continue
+            return count
 
-                    if status_filter and item_status != status_filter:
-                        continue
+        except Exception as e:
+            logger.exception(f"Erro ao contar via user index: {e}")
+            raise
 
-                    if device_id:
-                        initial_metadata = item.get("initial_metadata", {})
-                        additional_metadata = item.get("additional_metadata", {})
-                        item_device_id = initial_metadata.get("device_id") or additional_metadata.get("device_id")
+    async def get_all_results_with_offset(
+        self,
+        offset: int = 0,
+        limit: int = 20,
+        status_filter: Optional[str] = None,
+        user_id: Optional[str] = None,
+        device_id: Optional[str] = None,
+        exclude_errors: bool = False,
+    ) -> Dict[str, Any]:
+        try:
+            logger.info(
+                f"Buscando resultados: offset={offset}, limit={limit}, user={user_id}, "
+                f"device={device_id}, status={status_filter}, exclude_err={exclude_errors}"
+            )
 
-                        if item_device_id != device_id:
-                            continue
+            if user_id:
+                return await self._get_results_via_user_index(
+                    user_id, offset, limit, status_filter, device_id, exclude_errors
+                )
 
-                    accumulated_items.append(self._format_result_item(item))
+            if status_filter and not device_id and not exclude_errors:
+                return await self._get_results_via_status_index(status_filter, offset, limit)
 
-                    if len(accumulated_items) >= limit:
-                        break
+            return await self._get_results_via_entity_type_index(
+                offset, limit, status_filter, device_id, exclude_errors
+            )
 
-                current_last_key = dynamo_last_key
+        except Exception as e:
+            logger.exception(f"Erro ao buscar resultados com offset: {e}")
+            raise
 
-                if not current_last_key or len(accumulated_items) >= limit:
+    async def _get_results_via_entity_type_index(
+        self,
+        offset: int,
+        limit: int,
+        status_filter: Optional[str] = None,
+        device_id: Optional[str] = None,
+        exclude_errors: bool = False,
+    ) -> Dict[str, Any]:
+        try:
+            fetch_limit = offset + limit + self.fetch_buffer_size
+
+            all_items = []
+            last_key = None
+            total_fetched = 0
+
+            while total_fetched < fetch_limit:
+                batch_limit = min(1000, fetch_limit - total_fetched)
+
+                query_result = await self.dynamo_client.query_with_pagination(
+                    key_name="entity_type",
+                    key_value="COMBINED_RESULT",
+                    index_name="EntityTypeIndex",
+                    limit=batch_limit,
+                    last_evaluated_key=last_key,
+                    scan_index_forward=False,
+                )
+
+                items = query_result.get("items", [])
+                if not items:
                     break
 
-            except Exception as e:
-                logger.exception(f"Erro durante a consulta paginada ao DynamoDB: {e}")
-                raise
+                all_items.extend(items)
+                total_fetched += len(items)
 
-        next_api_key = current_last_key if len(accumulated_items) >= limit and current_last_key else None
+                last_key = query_result.get("last_evaluated_key")
+                if not last_key:
+                    break
 
-        logger.info(f"Retornando {len(accumulated_items)} resultados. Próxima chave API: {next_api_key is not None}")
+            filtered_items = []
+            for item in all_items:
+                if item.get("entity_type") != "COMBINED_RESULT":
+                    continue
 
-        return {"items": accumulated_items, "last_evaluated_key": next_api_key}
+                item_status = item.get("status", "")
+
+                if exclude_errors and item_status in ["error", "failed"]:
+                    continue
+
+                if status_filter and item_status != status_filter:
+                    continue
+
+                if device_id:
+                    initial_metadata = item.get("initial_metadata", {})
+                    additional_metadata = item.get("additional_metadata", {})
+                    item_device_id = initial_metadata.get("device_id") or additional_metadata.get("device_id")
+
+                    if item_device_id != device_id:
+                        continue
+
+                filtered_items.append(item)
+
+            paginated_items = filtered_items[offset : offset + limit]
+            formatted_items = [self._format_result_item(item) for item in paginated_items]
+
+            logger.info(f"Retornando {len(formatted_items)} resultados (offset={offset})")
+
+            return {"items": formatted_items}
+
+        except Exception as e:
+            logger.exception(f"Erro ao buscar resultados via entity type index: {e}")
+            raise
+
+    async def _get_results_via_status_index(
+        self,
+        status_filter: str,
+        offset: int,
+        limit: int,
+    ) -> Dict[str, Any]:
+        try:
+            fetch_limit = offset + limit + self.fetch_buffer_size
+
+            all_items = []
+            last_key = None
+            total_fetched = 0
+
+            while total_fetched < fetch_limit:
+                batch_limit = min(1000, fetch_limit - total_fetched)
+
+                query_result = await self.dynamo_client.query_with_pagination(
+                    key_name="status",
+                    key_value=status_filter,
+                    index_name="StatusCreatedIndex",
+                    limit=batch_limit,
+                    last_evaluated_key=last_key,
+                    scan_index_forward=False,
+                )
+
+                items = query_result.get("items", [])
+                if not items:
+                    break
+
+                combined_results = [item for item in items if item.get("entity_type") == "COMBINED_RESULT"]
+                all_items.extend(combined_results)
+                total_fetched += len(combined_results)
+
+                last_key = query_result.get("last_evaluated_key")
+                if not last_key:
+                    break
+
+            paginated_items = all_items[offset : offset + limit]
+            formatted_items = [self._format_result_item(item) for item in paginated_items]
+
+            logger.info(f"Retornando {len(formatted_items)} resultados via status index (offset={offset})")
+
+            return {"items": formatted_items}
+
+        except Exception as e:
+            logger.exception(f"Erro ao buscar resultados via status index: {e}")
+            raise
+
+    async def _get_results_via_user_index(
+        self,
+        user_id: str,
+        offset: int,
+        limit: int,
+        status_filter: Optional[str] = None,
+        device_id: Optional[str] = None,
+        exclude_errors: bool = False,
+    ) -> Dict[str, Any]:
+        try:
+            fetch_limit = offset + limit + self.fetch_buffer_size
+
+            all_items = []
+            last_key = None
+            total_fetched = 0
+
+            while total_fetched < fetch_limit:
+                batch_limit = min(1000, fetch_limit - total_fetched)
+
+                query_result = await self.dynamo_client.query_with_pagination(
+                    key_name="user_id",
+                    key_value=user_id,
+                    index_name="UserIdIndex",
+                    limit=batch_limit,
+                    last_evaluated_key=last_key,
+                    scan_index_forward=False,
+                )
+
+                items = query_result.get("items", [])
+                if not items:
+                    break
+
+                all_items.extend(items)
+                total_fetched += len(items)
+
+                last_key = query_result.get("last_evaluated_key")
+                if not last_key:
+                    break
+
+            filtered_items = []
+            for item in all_items:
+                if item.get("entity_type") != "COMBINED_RESULT":
+                    continue
+
+                item_status = item.get("status", "")
+
+                if exclude_errors and item_status in ["error", "failed"]:
+                    continue
+
+                if status_filter and item_status != status_filter:
+                    continue
+
+                if device_id:
+                    initial_metadata = item.get("initial_metadata", {})
+                    additional_metadata = item.get("additional_metadata", {})
+                    item_device_id = initial_metadata.get("device_id") or additional_metadata.get("device_id")
+
+                    if item_device_id != device_id:
+                        continue
+
+                filtered_items.append(item)
+
+            paginated_items = filtered_items[offset : offset + limit]
+            formatted_items = [self._format_result_item(item) for item in paginated_items]
+
+            logger.info(f"Retornando {len(formatted_items)} resultados via user index (offset={offset})")
+
+            return {"items": formatted_items}
+
+        except Exception as e:
+            logger.exception(f"Erro ao buscar resultados via user index com offset: {e}")
+            raise
 
     async def get_results_with_filters(
         self,
