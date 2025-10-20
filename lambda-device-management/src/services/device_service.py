@@ -67,18 +67,35 @@ class DeviceService:
         self, device_id: str, status: str, additional_data: Optional[Dict[str, Any]] = None
     ) -> Optional[Dict[str, Any]]:
         try:
-            success = await self.dynamo_repository.update_device_last_seen(device_id)
+            device = await self.dynamo_repository.get_device_by_id(device_id)
 
-            if not success:
+            if not device:
                 logger.warning(f"Dispositivo {device_id} não encontrado para heartbeat")
                 return None
 
-            if status != "online":
-                await self.dynamo_repository.update_device_status(device_id, status)
+            now = datetime.now(timezone.utc).isoformat()
 
-            device = await self.dynamo_repository.get_device_by_id(device_id)
-            if not device:
-                return None
+            update_expression_parts = ["last_seen = :last_seen", "updated_at = :updated_at"]
+            expression_values = {
+                ":last_seen": now,
+                ":updated_at": now,
+            }
+            expression_names = {}
+
+            if status:
+                update_expression_parts.append("#status = :status")
+                expression_values[":status"] = status
+                expression_names["#status"] = "status"
+
+            update_expression = "SET " + ", ".join(update_expression_parts)
+
+            key = {"pk": f"DEVICE#{device_id}", "sk": f"INFO#{device_id}"}
+            await self.dynamo_repository.dynamo_client.update_item(
+                key=key,
+                update_expression=update_expression,
+                expression_values=expression_values,
+                expression_names=expression_names if expression_names else None,
+            )
 
             if additional_data:
                 updated_stats = device.stats.copy()
@@ -99,7 +116,9 @@ class DeviceService:
                 if stats_updated:
                     await self.dynamo_repository.update_device_stats(device_id, updated_stats)
 
-            logger.debug(f"Heartbeat processado: {device_id}")
+            device = await self.dynamo_repository.get_device_by_id(device_id)
+
+            logger.debug(f"Heartbeat processado: {device_id} - status atualizado para {status}")
 
             pending_commands = await self._get_pending_commands(device_id)
             config_updates = await self._get_config_updates(device_id)

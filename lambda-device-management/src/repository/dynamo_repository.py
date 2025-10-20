@@ -132,10 +132,11 @@ class DynamoRepository:
             key = {"pk": f"DEVICE#{device_id}", "sk": f"INFO#{device_id}"}
             now = datetime.now(timezone.utc).isoformat()
 
-            update_expression = "SET #status = :status, updated_at = :updated_at"
+            update_expression = "SET #status = :status, updated_at = :updated_at, last_seen = :last_seen"
             expression_values = {
                 ":status": status,
                 ":updated_at": now,
+                ":last_seen": now,
             }
             expression_names = {"#status": "status"}
 
@@ -268,21 +269,27 @@ class DynamoRepository:
             logger.exception(f"Erro ao obter estatísticas da localização: {e}")
             raise
 
-    async def update_device_last_seen(self, device_id: str) -> bool:
+    async def update_device_last_seen(self, device_id: str, status: str = "online") -> bool:
         try:
             key = {"pk": f"DEVICE#{device_id}", "sk": f"INFO#{device_id}"}
             now = datetime.now(timezone.utc).isoformat()
 
-            update_expression = "SET last_seen = :last_seen, updated_at = :updated_at"
-            expression_values = {":last_seen": now, ":updated_at": now}
+            update_expression = "SET last_seen = :last_seen, updated_at = :updated_at, #status = :status"
+            expression_values = {
+                ":last_seen": now,
+                ":updated_at": now,
+                ":status": status,
+            }
+            expression_names = {"#status": "status"}
 
             await self.dynamo_client.update_item(
                 key=key,
                 update_expression=update_expression,
                 expression_values=expression_values,
+                expression_names=expression_names,
             )
 
-            logger.debug(f"Last seen do dispositivo {device_id} atualizado")
+            logger.debug(f"Last seen e status do dispositivo {device_id} atualizados para {status}")
             return True
         except Exception as e:
             logger.exception(f"Erro ao atualizar last seen: {e}")
