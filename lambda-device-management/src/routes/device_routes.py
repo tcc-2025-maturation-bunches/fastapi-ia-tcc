@@ -201,7 +201,7 @@ async def get_device(device_id: str):
 async def send_heartbeat(device_id: str, request: HeartbeatRequest):
     try:
         validate_device_id(device_id)
-        logger.info(f"Heartbeat recebido do dispositivo: {device_id}")
+        logger.info(f"Heartbeat recebido do dispositivo: {device_id} com status: {request.status}")
 
         device_service = DeviceService()
         result = await device_service.process_heartbeat(device_id, request.status, request.additional_data)
