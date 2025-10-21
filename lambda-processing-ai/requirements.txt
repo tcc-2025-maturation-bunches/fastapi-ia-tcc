@@ -1,0 +1,5 @@
+boto3==1.38.27
+aioboto3==15.0.0
+aiohttp==3.11.18
+pydantic==2.9.0
+python-multipart==0.0.20

@@ -1,0 +1,91 @@
+"""
+Domain Models - Fruit Detection Shared
+Modelos de dados e contratos do sistema
+"""
+
+from .base_models import (
+    BoundingBox,
+    ContractDetectionSummary,
+    ImageDimensions,
+    ImageMetadata,
+    MaturationDistribution,
+    MaturationInfo,
+    ProcessingMetadata,
+    ProcessingSummary,
+)
+from .combined_models import (
+    CombinedContractResponse,
+    CombinedProcessingRequest,
+    ContractDetection,
+    ContractDetectionResult,
+    ProcessingConfig,
+)
+from .device_models import (
+    BulkDeviceAction,
+    DeviceActivityResponse,
+    DeviceAlertRequest,
+    DeviceCapabilities,
+    DeviceConfig,
+    DeviceConfigUpdate,
+    DeviceDashboardResponse,
+    DeviceListFilter,
+    DeviceMaintenanceRequest,
+    DeviceRegistrationRequest,
+    DeviceResponse,
+    DeviceSetupResponse,
+    DeviceStats,
+    DeviceStatsResponse,
+    DeviceStatusUpdate,
+    GlobalConfigRequest,
+    ImageUploadProcessRequest,
+    ProcessingJobResponse,
+)
+from .http_models import (
+    PresignedUrlRequest,
+    PresignedUrlResponse,
+    ProcessImageRequest,
+    ProcessingResponse,
+    ProcessingStatusResponse,
+)
+from .status_models import HealthCheckResponse, ServiceStatusResponse
+
+__all__ = [
+    "BoundingBox",
+    "ContractDetectionSummary",
+    "ImageDimensions",
+    "ImageMetadata",
+    "MaturationDistribution",
+    "MaturationInfo",
+    "ProcessingMetadata",
+    "ProcessingSummary",
+    "CombinedContractResponse",
+    "CombinedProcessingRequest",
+    "ContractDetection",
+    "ContractDetectionResult",
+    "ProcessingConfig",
+    "BulkDeviceAction",
+    "DeviceActivityResponse",
+    "DeviceAlertRequest",
+    "DeviceCapabilities",
+    "DeviceConfig",
+    "DeviceConfigUpdate",
+    "DeviceDashboardResponse",
+    "DeviceListFilter",
+    "DeviceMaintenanceRequest",
+    "DeviceRegistrationRequest",
+    "DeviceResponse",
+    "DeviceSetupResponse",
+    "DeviceStats",
+    "DeviceStatsResponse",
+    "DeviceStatusUpdate",
+    "GlobalConfigRequest",
+    "ImageUploadProcessRequest",
+    "ProcessingJobResponse",
+    "PresignedUrlRequest",
+    "PresignedUrlResponse",
+    "ProcessImageRequest",
+    "ProcessingResponse",
+    "ProcessingStatusResponse",
+    "HealthCheckResponse",
+    "ServiceStatusResponse",
+]
