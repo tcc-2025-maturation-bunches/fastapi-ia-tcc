@@ -340,7 +340,9 @@ class ResultsService:
             logger.info(f"Gerando estatísticas de inferência dos últimos {days} dias")
 
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
-            response = await self.dynamo_repository.get_results_with_filters(start_date=cutoff_date, limit=1000)
+            response = await self.dynamo_repository.get_results_with_filters(
+                start_date=cutoff_date, status_filter="success", limit=2000
+            )
 
             items = response.get("items", [])
             total_inspections = len(items)
