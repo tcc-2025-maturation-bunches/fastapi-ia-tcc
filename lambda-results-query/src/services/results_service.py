@@ -341,7 +341,7 @@ class ResultsService:
 
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
             response = await self.dynamo_repository.get_results_with_filters(
-                start_date=cutoff_date, status_filter=["success", "completed"], limit=1000
+                start_date=cutoff_date, status_filter="success", limit=2000
             )
 
             items = response.get("items", [])
