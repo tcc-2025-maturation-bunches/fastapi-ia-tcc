@@ -352,7 +352,7 @@ class ResultsService:
                 "verde": "Verdes",
                 "quase_maduro": "Quase Maduros",
                 "maduro": "Maduros",
-                "muito_maduro_ou_passado": "Muito Maduros ou Passados",
+                "muito_maduro_ou_passado": "Muito Maduros/Passados",
             }
             MATURATION_COLORS = {
                 "verde": "#22c55e",
