@@ -496,6 +496,14 @@ class DynamoRepository:
         limit: int = 1000,
     ) -> Dict[str, Any]:
         try:
+            if status_filter and start_date and not device_id:
+                return await self._get_results_via_status_created_index_with_date_range(
+                    status_filter, start_date, end_date
+                )
+
+            if start_date and not status_filter and not device_id:
+                return await self._get_all_results_via_status_index_with_date_range(start_date, end_date)
+
             filter_expressions = ["entity_type = :entity_type"]
             expression_values = {":entity_type": "COMBINED_RESULT"}
 
@@ -534,6 +542,95 @@ class DynamoRepository:
 
         except Exception as e:
             logger.exception(f"Erro ao buscar resultados com filtros: {e}")
+            raise
+
+    async def _get_results_via_status_created_index_with_date_range(
+        self,
+        status: str,
+        start_date: datetime,
+        end_date: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        try:
+            all_items = []
+            last_key = None
+
+            logger.info(
+                f"Buscando resultados via StatusCreatedIndex: status={status}, "
+                f"start_date={start_date.isoformat()}, end_date={end_date.isoformat() if end_date else 'None'}"
+            )
+
+            while True:
+                query_result = await self.dynamo_client.query_with_pagination(
+                    key_name="status",
+                    key_value=status,
+                    index_name="StatusCreatedIndex",
+                    limit=self.max_scan_limit,
+                    last_evaluated_key=last_key,
+                    scan_index_forward=False,
+                )
+
+                items = query_result.get("items", [])
+                if not items:
+                    break
+
+                for item in items:
+                    if item.get("entity_type") != "COMBINED_RESULT":
+                        continue
+
+                    if not self._matches_date_range(item, start_date, end_date):
+                        continue
+
+                    all_items.append(item)
+
+                last_key = query_result.get("last_evaluated_key")
+
+                if not last_key:
+                    break
+
+                logger.debug(f"Coletados {len(all_items)} itens até agora, continuando paginação...")
+
+            formatted_items = [self._format_result_item(item) for item in all_items]
+
+            logger.info(f"Total de {len(formatted_items)} resultados encontrados via StatusCreatedIndex")
+
+            return {"items": formatted_items}
+
+        except Exception as e:
+            logger.exception(f"Erro ao buscar via StatusCreatedIndex com date range: {e}")
+            raise
+
+    async def _get_all_results_via_status_index_with_date_range(
+        self,
+        start_date: datetime,
+        end_date: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        try:
+            all_statuses = ["completed", "success", "processing", "pending", "error", "failed"]
+            all_items = []
+
+            logger.info(
+                f"Buscando todos os resultados via StatusCreatedIndex: "
+                f"start_date={start_date.isoformat()}, end_date={end_date.isoformat() if end_date else 'None'}"
+            )
+
+            for status in all_statuses:
+                try:
+                    result = await self._get_results_via_status_created_index_with_date_range(
+                        status, start_date, end_date
+                    )
+                    items = result.get("items", [])
+                    all_items.extend(items)
+                    logger.debug(f"Status '{status}': {len(items)} itens encontrados")
+                except Exception as e:
+                    logger.warning(f"Erro ao buscar status '{status}': {e}, continuando...")
+                    continue
+
+            logger.info(f"Total de {len(all_items)} resultados encontrados em todos os status")
+
+            return {"items": all_items}
+
+        except Exception as e:
+            logger.exception(f"Erro ao buscar todos os resultados via status index: {e}")
             raise
 
     def _format_result_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
