@@ -229,7 +229,7 @@ class DynamoRepository:
                 if not last_key:
                     break
 
-                if count % 1000 == 0:
+                if count > 0 and count % 1000 == 0:
                     logger.info(f"Contagem em progresso: {count} itens encontrados até agora")
 
             logger.info(f"Contagem finalizada via EntityTypeIndex: {count} resultados")
