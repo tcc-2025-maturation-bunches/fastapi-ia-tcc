@@ -150,17 +150,16 @@ class DynamoRepository:
                 )
                 return {"total_count": count_via_index}
 
-            items = await self.dynamo_client.scan(
-                filter_expression=" AND ".join(filter_expressions),
-                expression_values=expression_values,
-                expression_names=expression_names if expression_names else None,
-                limit=self.max_scan_limit,
+            count = await self._count_via_entity_type_index(
+                status_filter=status_filter,
+                device_id=device_id,
+                start_date=start_date,
+                end_date=end_date,
+                exclude_errors=exclude_errors,
             )
 
-            total_count = len(items)
-            logger.info(f"Total de resultados contados: {total_count}")
-
-            return {"total_count": total_count}
+            logger.info(f"Total de resultados contados via EntityTypeIndex: {count}")
+            return {"total_count": count}
 
         except Exception as e:
             logger.exception(f"Erro ao contar resultados: {e}")
@@ -192,6 +191,52 @@ class DynamoRepository:
             return count
         except Exception as e:
             logger.exception(f"Erro ao contar via user index: {e}")
+            raise
+
+    async def _count_via_entity_type_index(
+        self,
+        status_filter: Optional[str] = None,
+        device_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        exclude_errors: bool = False,
+    ) -> int:
+        try:
+            count = 0
+            last_key = None
+
+            logger.info("Contando resultados via EntityTypeIndex (query)")
+
+            while True:
+                query_result = await self.dynamo_client.query_with_pagination(
+                    key_name="entity_type",
+                    key_value="COMBINED_RESULT",
+                    index_name="EntityTypeIndex",
+                    limit=self.max_scan_limit,
+                    last_evaluated_key=last_key,
+                    scan_index_forward=False,
+                )
+
+                items = query_result.get("items", [])
+                if not items:
+                    break
+
+                for item in items:
+                    if self._matches_all_filters(item, status_filter, device_id, start_date, end_date, exclude_errors):
+                        count += 1
+
+                last_key = query_result.get("last_evaluated_key")
+                if not last_key:
+                    break
+
+                if count > 0 and count % 1000 == 0:
+                    logger.info(f"Contagem em progresso: {count} itens encontrados até agora")
+
+            logger.info(f"Contagem finalizada via EntityTypeIndex: {count} resultados")
+            return count
+
+        except Exception as e:
+            logger.exception(f"Erro ao contar via entity type index: {e}")
             raise
 
     def _matches_status_filter(self, item: Dict[str, Any], status_filter: Optional[str], exclude_errors: bool) -> bool:
