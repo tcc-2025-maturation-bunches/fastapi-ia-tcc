@@ -7,6 +7,7 @@ from fruit_detection_shared.domain.entities import CombinedResult
 from src.models.stats_models import (
     InferenceStatsResponse,
     LocationCountItem,
+    LocationDailyItem,
     MaturationDistributionItem,
     MaturationTrendItem,
 )
@@ -348,22 +349,11 @@ class ResultsService:
             total_inspections = len(items)
 
             MATURATION_KEYS = ["verde", "quase_maduro", "maduro", "muito_maduro_ou_passado"]
-            MATURATION_LABELS = {
-                "verde": "Verdes",
-                "quase_maduro": "Quase Maduros",
-                "maduro": "Maduros",
-                "muito_maduro_ou_passado": "Muito Maduros/Passados",
-            }
-            MATURATION_COLORS = {
-                "verde": "#22c55e",
-                "quase_maduro": "#84cc16",
-                "maduro": "#eab308",
-                "muito_maduro_ou_passado": "#ef4444",
-            }
 
             maturation_counts = {key: 0 for key in MATURATION_KEYS}
             trend_data: Dict[str, Dict[str, int]] = {}
             location_data: Dict[str, Dict[str, int]] = {}
+            location_daily_data: Dict[str, Dict[str, Dict[str, int]]] = {}
             total_objects = 0
 
             items.sort(key=lambda x: x.get("created_at", ""))
@@ -381,6 +371,7 @@ class ResultsService:
                 location = item.get("initial_metadata", {}).get("location", "Desconhecido")
                 if location not in location_data:
                     location_data[location] = {"count": 0, **{k: 0 for k in MATURATION_KEYS}}
+                    location_daily_data[location] = {}
                 location_data[location]["count"] += 1
 
                 maturation_distribution = {}
@@ -404,6 +395,11 @@ class ResultsService:
                                 trend_data[day_str]["total"] = 0
                             trend_data[day_str][key] += count
 
+                            if day_str not in location_daily_data[location]:
+                                location_daily_data[location][day_str] = {k: 0 for k in MATURATION_KEYS}
+                                location_daily_data[location][day_str]["total"] = 0
+                            location_daily_data[location][day_str][key] += count
+
                         location_data[location][key] += count
                         item_total_objects += count
 
@@ -414,11 +410,15 @@ class ResultsService:
                         trend_data[day_str]["total"] = 0
                     trend_data[day_str]["total"] += item_total_objects
 
+                    if day_str not in location_daily_data[location]:
+                        location_daily_data[location][day_str] = {k: 0 for k in MATURATION_KEYS}
+                        location_daily_data[location][day_str]["total"] = 0
+                    location_daily_data[location][day_str]["total"] += item_total_objects
+
             maturation_distribution = [
                 MaturationDistributionItem(
-                    name=MATURATION_LABELS.get(key, key),
+                    key=key,
                     value=maturation_counts[key],
-                    color=MATURATION_COLORS.get(key),
                 )
                 for key in MATURATION_KEYS
             ]
@@ -426,7 +426,14 @@ class ResultsService:
             maturation_trend = [MaturationTrendItem(date=day, **counts) for day, counts in sorted(trend_data.items())]
 
             counts_by_location = [
-                LocationCountItem(location=loc, **counts)
+                LocationCountItem(
+                    location=loc,
+                    **{k: counts[k] for k in ["count"] + MATURATION_KEYS},
+                    daily_trend=[
+                        LocationDailyItem(date=day, **day_counts)
+                        for day, day_counts in sorted(location_daily_data[loc].items())
+                    ],
+                )
                 for loc, counts in sorted(location_data.items(), key=lambda item: item[1]["count"], reverse=True)
             ]
 
