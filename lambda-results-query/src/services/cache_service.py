@@ -72,14 +72,29 @@ class CacheService:
             self._cache.clear()
             logger.info(f"Cache limpo: {count} chaves removidas")
 
-    def get_stats(self) -> Dict[str, Any]:
+    async def cleanup_expired(self) -> int:
+        async with self._lock:
+            keys_to_delete = [key for key, entry in self._cache.items() if self._is_expired(entry)]
+            for key in keys_to_delete:
+                del self._cache[key]
+
+            if keys_to_delete:
+                logger.debug(f"Limpeza automática: {len(keys_to_delete)} chaves expiradas removidas")
+
+            return len(keys_to_delete)
+
+    async def get_stats(self, cleanup: bool = True) -> Dict[str, Any]:
+        if cleanup:
+            expired_count = await self.cleanup_expired()
+        else:
+            expired_count = sum(1 for entry in self._cache.values() if self._is_expired(entry))
+
         total_keys = len(self._cache)
-        expired_keys = sum(1 for entry in self._cache.values() if self._is_expired(entry))
 
         return {
             "total_keys": total_keys,
-            "expired_keys": expired_keys,
-            "active_keys": total_keys - expired_keys,
+            "expired_keys": expired_count,
+            "active_keys": total_keys,
         }
 
     def count_keys_by_prefix(self, prefix: str) -> int:

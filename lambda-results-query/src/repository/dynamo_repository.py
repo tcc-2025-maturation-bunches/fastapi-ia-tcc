@@ -123,9 +123,8 @@ class DynamoRepository:
                 filter_expressions.append("#status = :status")
                 expression_values[":status"] = status_filter
                 expression_names["#status"] = "status"
-
-            if exclude_errors:
-                filter_expressions.append("#status <> :error_status AND #status <> :failed_status")
+            elif exclude_errors:
+                filter_expressions.append("(#status <> :error_status OR #status <> :failed_status)")
                 expression_values[":error_status"] = "error"
                 expression_values[":failed_status"] = "failed"
                 expression_names["#status"] = "status"
@@ -741,10 +740,8 @@ class DynamoRepository:
                 filter_parts.append("#status = :status")
                 expression_values[":status"] = status_filter
                 expression_names["#status"] = "status"
-
-            if exclude_errors:
-                filter_parts.append("#status <> :error_status")
-                filter_parts.append("#status <> :failed_status")
+            elif exclude_errors:
+                filter_parts.append("(#status <> :error_status OR #status <> :failed_status)")
                 expression_values[":error_status"] = "error"
                 expression_values[":failed_status"] = "failed"
                 expression_names["#status"] = "status"
@@ -899,10 +896,8 @@ class DynamoRepository:
                 filter_parts.append("#status = :status")
                 expression_values[":status"] = status_filter
                 expression_names["#status"] = "status"
-
-            if exclude_errors:
-                filter_parts.append("#status <> :error_status")
-                filter_parts.append("#status <> :failed_status")
+            elif exclude_errors:
+                filter_parts.append("(#status <> :error_status OR #status <> :failed_status)")
                 expression_values[":error_status"] = "error"
                 expression_values[":failed_status"] = "failed"
                 expression_names["#status"] = "status"

@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -32,7 +32,7 @@ def get_cache_service() -> CacheService:
 async def get_cache_stats(cache_service: CacheService = Depends(get_cache_service)) -> CacheStatsResponse:
     try:
         logger.info("Recuperando estatísticas do cache")
-        stats = cache_service.get_stats()
+        stats = await cache_service.get_stats()
         return CacheStatsResponse(**stats)
     except Exception as e:
         logger.exception(f"Erro ao recuperar estatísticas do cache: {e}")
@@ -46,7 +46,7 @@ async def get_cache_stats(cache_service: CacheService = Depends(get_cache_servic
 async def clear_all_cache(cache_service: CacheService = Depends(get_cache_service)) -> CacheClearResponse:
     try:
         logger.info("Limpando todo o cache")
-        stats_before = cache_service.get_stats()
+        stats_before = await cache_service.get_stats()
         keys_count = stats_before["total_keys"]
 
         await cache_service.clear_all()
@@ -84,24 +84,28 @@ async def clear_cache_by_prefix(
         )
 
 
+class CacheKeyRequest(BaseModel):
+    prefix: str
+    params: Dict[str, Any] = {}
+
+
 @cache_router.delete("/clear/key", response_model=CacheClearResponse)
 async def clear_cache_by_key(
-    prefix: str = Query(..., description="Prefixo da chave"),
+    request: CacheKeyRequest,
     cache_service: CacheService = Depends(get_cache_service),
-    **kwargs: Any,
 ) -> CacheClearResponse:
     try:
-        logger.info(f"Removendo chave específica do cache: {prefix}")
+        logger.info(f"Removendo chave específica do cache: {request.prefix}")
 
-        key_exists = cache_service.key_exists(prefix, **kwargs)
+        key_exists = cache_service.key_exists(request.prefix, **request.params)
 
-        await cache_service.delete(prefix, **kwargs)
+        await cache_service.delete(request.prefix, **request.params)
 
         if key_exists:
-            logger.info(f"Chave removida do cache: {prefix}")
+            logger.info(f"Chave removida do cache: {request.prefix}")
             return CacheClearResponse(success=True, message="Chave removida com sucesso", keys_removed=1)
         else:
-            logger.info(f"Chave não encontrada no cache: {prefix}")
+            logger.info(f"Chave não encontrada no cache: {request.prefix}")
             return CacheClearResponse(success=True, message="Chave não encontrada no cache", keys_removed=0)
     except Exception as e:
         logger.exception(f"Erro ao remover chave do cache: {e}")
