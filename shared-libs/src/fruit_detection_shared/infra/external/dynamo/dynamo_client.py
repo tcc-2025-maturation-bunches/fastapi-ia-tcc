@@ -190,53 +190,59 @@ class DynamoClient:
                     query_kwargs["ExclusiveStartKey"] = last_evaluated_key
 
                 if filter_expression:
-                    conditions = []
-                    for part in filter_expression.split(" AND "):
-                        part = part.strip()
 
-                        if " >= " in part:
-                            attr, value_key = part.split(" >= ")
-                            attr = attr.strip()
-                            value_key = value_key.strip()
-                            original_attr = attr
-                            attr = attr.replace("#", "")
-                            if expression_names and original_attr in expression_names:
-                                attr = expression_names[original_attr]
-                            if expression_values and value_key in expression_values:
-                                conditions.append(Attr(attr).gte(expression_values[value_key]))
+                    def _parse_filter_condition(expr: str) -> Any:
+                        expr = expr.strip()
 
-                        elif " <= " in part:
-                            attr, value_key = part.split(" <= ")
-                            attr = attr.strip()
-                            value_key = value_key.strip()
-                            original_attr = attr
-                            attr = attr.replace("#", "")
-                            if expression_names and original_attr in expression_names:
-                                attr = expression_names[original_attr]
-                            if expression_values and value_key in expression_values:
-                                conditions.append(Attr(attr).lte(expression_values[value_key]))
+                        if expr.startswith("(") and expr.endswith(")"):
+                            expr = expr[1:-1].strip()
 
-                        elif " <> " in part:
-                            attr, value_key = part.split(" <> ")
-                            attr = attr.strip()
-                            value_key = value_key.strip()
-                            original_attr = attr
-                            attr = attr.replace("#", "")
-                            if expression_names and original_attr in expression_names:
-                                attr = expression_names[original_attr]
-                            if expression_values and value_key in expression_values:
-                                conditions.append(Attr(attr).ne(expression_values[value_key]))
+                        if " OR " in expr:
+                            or_parts = [p.strip() for p in expr.split(" OR ")]
+                            or_conditions = [_parse_filter_condition(p) for p in or_parts if p]
+                            if or_conditions:
+                                result = or_conditions[0]
+                                for cond in or_conditions[1:]:
+                                    result = result | cond
+                                return result
 
-                        elif " = " in part:
-                            attr, value_key = part.split(" = ")
-                            attr = attr.strip()
-                            value_key = value_key.strip()
-                            original_attr = attr
-                            attr = attr.replace("#", "")
-                            if expression_names and original_attr in expression_names:
-                                attr = expression_names[original_attr]
-                            if expression_values and value_key in expression_values:
-                                conditions.append(Attr(attr).eq(expression_values[value_key]))
+                        if " >= " in expr:
+                            attr, value_key = expr.split(" >= ", 1)
+                        elif " <= " in expr:
+                            attr, value_key = expr.split(" <= ", 1)
+                        elif " <> " in expr:
+                            attr, value_key = expr.split(" <> ", 1)
+                        elif " = " in expr:
+                            attr, value_key = expr.split(" = ", 1)
+                        else:
+                            raise ValueError(f"Operador de comparação inválido na expressão de filtro: {expr}")
+
+                        attr = attr.strip()
+                        value_key = value_key.strip()
+                        original_attr = attr
+                        attr = attr.replace("#", "")
+
+                        if expression_names and original_attr in expression_names:
+                            attr = expression_names[original_attr]
+
+                        if not expression_values or value_key not in expression_values:
+                            raise ValueError(f"Valor de filtro obrigatório ausente: {value_key}")
+
+                        value = expression_values[value_key]
+
+                        if " >= " in expr:
+                            return Attr(attr).gte(value)
+                        elif " <= " in expr:
+                            return Attr(attr).lte(value)
+                        elif " <> " in expr:
+                            return Attr(attr).ne(value)
+                        elif " = " in expr:
+                            return Attr(attr).eq(value)
+
+                        raise ValueError(f"Falha ao processar condição de filtro: {expr}")
+
+                    and_parts = filter_expression.split(" AND ")
+                    conditions = [_parse_filter_condition(part) for part in and_parts]
 
                     if conditions:
                         combined_filter = conditions[0]

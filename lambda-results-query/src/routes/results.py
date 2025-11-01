@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,6 +9,7 @@ from pydantic import BaseModel
 from src.app.config import settings
 from src.models.filter_models import DateRangeFilter
 from src.models.stats_models import InferenceStatsResponse
+from src.services.cache_service import CacheService
 from src.services.results_service import ResultsService
 from src.utils.validator import validate_device_id, validate_request_id, validate_user_id
 
@@ -35,8 +37,16 @@ class CursorBasedResultsResponse(BaseModel):
     filters_applied: Dict[str, Any]
 
 
+@lru_cache()
+def get_shared_cache_service() -> CacheService:
+    logger.info("Inicializando CacheService compartilhado")
+    return CacheService(ttl_seconds=settings.CACHE_TTL_SECONDS)
+
+
+@lru_cache()
 def get_results_service() -> ResultsService:
-    return ResultsService()
+    logger.info("Inicializando ResultsService singleton")
+    return ResultsService(cache_service=get_shared_cache_service())
 
 
 @results_router.get("/request/{request_id}", response_model=Dict[str, Any])
