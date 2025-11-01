@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from fruit_detection_shared.domain.entities import CombinedResult
 
+from src.app.config import settings
 from src.models.stats_models import (
     InferenceStatsResponse,
     LocationCountItem,
@@ -12,13 +13,19 @@ from src.models.stats_models import (
     MaturationTrendItem,
 )
 from src.repository.dynamo_repository import DynamoRepository
+from src.services.cache_service import CacheService
 
 logger = logging.getLogger(__name__)
 
 
 class ResultsService:
-    def __init__(self, dynamo_repository: Optional[DynamoRepository] = None):
+    def __init__(
+        self, dynamo_repository: Optional[DynamoRepository] = None, cache_service: Optional[CacheService] = None
+    ):
         self.dynamo_repository = dynamo_repository or DynamoRepository()
+        if cache_service is None:
+            cache_service = CacheService(ttl_seconds=settings.CACHE_TTL_SECONDS)
+        self.cache_service = cache_service
 
     async def get_by_request_id(self, request_id: str) -> Optional[Dict[str, Any]]:
         try:
@@ -71,15 +78,32 @@ class ResultsService:
             if page_size < 1:
                 page_size = 20
 
-            total_count_result = await self.dynamo_repository.count_all_results(
-                status_filter=status_filter,
-                user_id=user_id,
-                device_id=device_id,
-                start_date=start_date,
-                end_date=end_date,
-                exclude_errors=exclude_errors,
-            )
-            total_count = total_count_result.get("total_count", 0)
+            cache_key_params = {
+                "status": status_filter,
+                "user": user_id,
+                "device": device_id,
+                "start": start_date.isoformat() if start_date else None,
+                "end": end_date.isoformat() if end_date else None,
+                "exclude_err": exclude_errors,
+            }
+
+            cached_count = await self.cache_service.get("count", **cache_key_params)
+            if cached_count is not None:
+                logger.info(f"Usando contagem em cache: {cached_count}")
+                total_count = cached_count
+            else:
+                total_count_result = await self.dynamo_repository.count_all_results_optimized(
+                    status_filter=status_filter,
+                    user_id=user_id,
+                    device_id=device_id,
+                    start_date=start_date,
+                    end_date=end_date,
+                    exclude_errors=exclude_errors,
+                )
+                total_count = total_count_result.get("total_count", 0)
+                await self.cache_service.set(
+                    "count", total_count, ttl_seconds=settings.CACHE_COUNT_TTL_SECONDS, **cache_key_params
+                )
 
             total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 1
 
@@ -101,10 +125,7 @@ class ResultsService:
 
             items = response.get("items", [])
 
-            processed_items = []
-            for item in items:
-                processed_item = self._process_result_item(item)
-                processed_items.append(processed_item)
+            processed_items = [self._process_result_item(item) for item in items]
 
             logger.info(
                 f"Página {page}/{total_pages} recuperada com {len(processed_items)} itens " f"(total: {total_count})"
@@ -130,6 +151,56 @@ class ResultsService:
 
         except Exception as e:
             logger.exception(f"Erro ao recuperar resultados paginados: {e}")
+            raise
+
+    async def get_all_results_cursor_based(
+        self,
+        limit: int = 20,
+        cursor: Optional[str] = None,
+        status_filter: Optional[str] = None,
+        user_id: Optional[str] = None,
+        device_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        exclude_errors: bool = False,
+    ) -> Dict[str, Any]:
+        try:
+            logger.info(f"Paginação baseada em cursor: limit={limit}, cursor={'presente' if cursor else 'nenhum'}")
+
+            response = await self.dynamo_repository.get_all_results_cursor_based(
+                limit=limit,
+                cursor=cursor,
+                status_filter=status_filter,
+                user_id=user_id,
+                device_id=device_id,
+                start_date=start_date,
+                end_date=end_date,
+                exclude_errors=exclude_errors,
+            )
+
+            items = response.get("items", [])
+            processed_items = [self._process_result_item(item) for item in items]
+
+            result = {
+                "items": processed_items,
+                "next_cursor": response.get("next_cursor"),
+                "has_more": response.get("has_more", False),
+                "count": len(processed_items),
+                "filters_applied": {
+                    "status_filter": status_filter,
+                    "user_id": user_id,
+                    "device_id": device_id,
+                    "start_date": start_date.isoformat() if start_date else None,
+                    "end_date": end_date.isoformat() if end_date else None,
+                    "exclude_errors": exclude_errors,
+                },
+            }
+
+            logger.info(f"Query cursor-based retornou {len(processed_items)} itens")
+            return result
+
+        except Exception as e:
+            logger.exception(f"Erro ao recuperar resultados cursor-based: {e}")
             raise
 
     async def get_results_summary(self, days: int = 7, device_id: Optional[str] = None) -> Dict[str, Any]:
@@ -340,6 +411,12 @@ class ResultsService:
         try:
             logger.info(f"Gerando estatísticas de inferência dos últimos {days} dias")
 
+            cache_params = {"days": days}
+            cached_stats = await self.cache_service.get("inference_stats", **cache_params)
+            if cached_stats is not None:
+                logger.info("Retornando estatísticas de inferência em cache")
+                return cached_stats
+
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
             response = await self.dynamo_repository.get_results_with_filters(
                 start_date=cutoff_date, status_filter="success", limit=2000
@@ -355,8 +432,6 @@ class ResultsService:
             location_data: Dict[str, Dict[str, int]] = {}
             location_daily_data: Dict[str, Dict[str, Dict[str, int]]] = {}
             total_objects = 0
-
-            items.sort(key=lambda x: x.get("created_at", ""))
 
             for item in items:
                 created_at_str = item.get("created_at")
@@ -383,44 +458,34 @@ class ResultsService:
                     summary = detection_result.get("summary", {})
                     maturation_distribution = summary.get("maturation_counts", {})
 
-                item_total_objects = 0
-                if maturation_distribution and isinstance(maturation_distribution, dict):
-                    for key in MATURATION_KEYS:
-                        count = maturation_distribution.get(key, 0)
-                        maturation_counts[key] += count
+                if not maturation_distribution or not isinstance(maturation_distribution, dict):
+                    continue
 
-                        if day_str != "Unknown":
-                            if day_str not in trend_data:
-                                trend_data[day_str] = {k: 0 for k in MATURATION_KEYS}
-                                trend_data[day_str]["total"] = 0
-                            trend_data[day_str][key] += count
+                item_total_count = 0
+                for key in MATURATION_KEYS:
+                    count = maturation_distribution.get(key, 0)
+                    maturation_counts[key] += count
+                    location_data[location][key] += count
+                    total_objects += count
+                    item_total_count += count
 
-                            if day_str not in location_daily_data[location]:
-                                location_daily_data[location][day_str] = {k: 0 for k in MATURATION_KEYS}
-                                location_daily_data[location][day_str]["total"] = 0
-                            location_daily_data[location][day_str][key] += count
+                    if day_str != "Unknown":
+                        if day_str not in trend_data:
+                            trend_data[day_str] = {k: 0 for k in MATURATION_KEYS}
+                            trend_data[day_str]["total"] = 0
+                        trend_data[day_str][key] += count
 
-                        location_data[location][key] += count
-                        item_total_objects += count
+                        if day_str not in location_daily_data[location]:
+                            location_daily_data[location][day_str] = {k: 0 for k in MATURATION_KEYS}
+                            location_daily_data[location][day_str]["total"] = 0
+                        location_daily_data[location][day_str][key] += count
 
-                total_objects += item_total_objects
-                if day_str != "Unknown" and item_total_objects > 0:
-                    if day_str not in trend_data:
-                        trend_data[day_str] = {k: 0 for k in MATURATION_KEYS}
-                        trend_data[day_str]["total"] = 0
-                    trend_data[day_str]["total"] += item_total_objects
-
-                    if day_str not in location_daily_data[location]:
-                        location_daily_data[location][day_str] = {k: 0 for k in MATURATION_KEYS}
-                        location_daily_data[location][day_str]["total"] = 0
-                    location_daily_data[location][day_str]["total"] += item_total_objects
+                if day_str != "Unknown":
+                    trend_data[day_str]["total"] += item_total_count
+                    location_daily_data[location][day_str]["total"] += item_total_count
 
             maturation_distribution = [
-                MaturationDistributionItem(
-                    key=key,
-                    value=maturation_counts[key],
-                )
-                for key in MATURATION_KEYS
+                MaturationDistributionItem(key=key, value=maturation_counts[key]) for key in MATURATION_KEYS
             ]
 
             maturation_trend = [MaturationTrendItem(date=day, **counts) for day, counts in sorted(trend_data.items())]
@@ -447,8 +512,13 @@ class ResultsService:
                 generated_at=datetime.now(timezone.utc).isoformat(),
             )
 
+            result = response_model.model_dump()
+            await self.cache_service.set(
+                "inference_stats", result, ttl_seconds=settings.CACHE_STATS_TTL_SECONDS, **cache_params
+            )
+
             logger.info(f"Estatísticas de inferência geradas: {total_inspections} inspeções, {total_objects} objetos")
-            return response_model.model_dump()
+            return result
 
         except Exception as e:
             logger.exception(f"Erro ao gerar estatísticas de inferência: {e}")

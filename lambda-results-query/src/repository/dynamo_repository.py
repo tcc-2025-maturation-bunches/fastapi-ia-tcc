@@ -123,9 +123,8 @@ class DynamoRepository:
                 filter_expressions.append("#status = :status")
                 expression_values[":status"] = status_filter
                 expression_names["#status"] = "status"
-
-            if exclude_errors:
-                filter_expressions.append("#status <> :error_status AND #status <> :failed_status")
+            elif exclude_errors:
+                filter_expressions.append("(#status <> :error_status OR #status <> :failed_status)")
                 expression_values[":error_status"] = "error"
                 expression_values[":failed_status"] = "failed"
                 expression_names["#status"] = "status"
@@ -713,14 +712,249 @@ class DynamoRepository:
     ) -> bool:
         if item.get("entity_type") != "COMBINED_RESULT":
             return False
-
         if not self._matches_status_filter(item, status_filter, exclude_errors):
             return False
-
         if not self._matches_date_range(item, start_date, end_date):
             return False
-
         if not self._matches_device_id(item, device_id):
             return False
-
         return True
+
+    async def count_all_results_optimized(
+        self,
+        status_filter: Optional[str] = None,
+        user_id: Optional[str] = None,
+        device_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        exclude_errors: bool = False,
+    ) -> Dict[str, Any]:
+        try:
+            logger.info("Usando contagem otimizada com FilterExpression")
+
+            filter_parts = []
+            expression_values = {}
+            expression_names = {}
+
+            if status_filter:
+                filter_parts.append("#status = :status")
+                expression_values[":status"] = status_filter
+                expression_names["#status"] = "status"
+            elif exclude_errors:
+                filter_parts.append("(#status <> :error_status OR #status <> :failed_status)")
+                expression_values[":error_status"] = "error"
+                expression_values[":failed_status"] = "failed"
+                expression_names["#status"] = "status"
+
+            if start_date:
+                filter_parts.append("created_at >= :start_date")
+                expression_values[":start_date"] = start_date.isoformat()
+
+            if end_date:
+                filter_parts.append("created_at <= :end_date")
+                expression_values[":end_date"] = end_date.isoformat()
+
+            filter_expression = " AND ".join(filter_parts) if filter_parts else None
+
+            if user_id:
+                return await self._count_via_user_index_optimized(
+                    user_id, filter_expression, expression_values, expression_names, device_id
+                )
+
+            return await self._count_via_entity_type_index_optimized(
+                filter_expression, expression_values, expression_names, device_id
+            )
+
+        except Exception as e:
+            logger.exception(f"Erro ao contar resultados otimizado: {e}")
+            raise
+
+    async def _count_via_entity_type_index_optimized(
+        self,
+        filter_expression: Optional[str],
+        expression_values: Dict[str, Any],
+        expression_names: Dict[str, str],
+        device_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        try:
+            count = 0
+            last_key = None
+            scanned_count = 0
+
+            while True:
+                query_result = await self.dynamo_client.query_with_pagination(
+                    key_name="entity_type",
+                    key_value="COMBINED_RESULT",
+                    index_name="EntityTypeIndex",
+                    limit=self.max_scan_limit,
+                    last_evaluated_key=last_key,
+                    scan_index_forward=False,
+                    filter_expression=filter_expression,
+                    expression_values=expression_values if expression_values else None,
+                    expression_names=expression_names if expression_names else None,
+                )
+
+                items = query_result.get("items", [])
+                scanned_count += query_result.get("scanned_count", 0)
+
+                if device_id:
+                    for item in items:
+                        if self._matches_device_id(item, device_id):
+                            count += 1
+                else:
+                    count += len(items)
+
+                last_key = query_result.get("last_evaluated_key")
+                if not last_key:
+                    break
+
+                if count % 1000 == 0 and count > 0:
+                    logger.info(f"Contagem em progresso: {count} itens")
+
+            logger.info(f"Contagem finalizada: {count} resultados (scanned: {scanned_count})")
+            return {"total_count": count, "scanned_count": scanned_count}
+
+        except Exception as e:
+            logger.exception(f"Erro ao contar via entity type index otimizado: {e}")
+            raise
+
+    async def _count_via_user_index_optimized(
+        self,
+        user_id: str,
+        filter_expression: Optional[str],
+        expression_values: Dict[str, Any],
+        expression_names: Dict[str, str],
+        device_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        try:
+            count = 0
+            last_key = None
+
+            while True:
+                query_result = await self.dynamo_client.query_with_pagination(
+                    key_name="user_id",
+                    key_value=user_id,
+                    index_name="UserIdIndex",
+                    limit=self.max_scan_limit,
+                    last_evaluated_key=last_key,
+                    scan_index_forward=False,
+                    filter_expression=filter_expression,
+                    expression_values=expression_values if expression_values else None,
+                    expression_names=expression_names if expression_names else None,
+                )
+
+                items = query_result.get("items", [])
+
+                if device_id:
+                    for item in items:
+                        if self._matches_device_id(item, device_id):
+                            count += 1
+                else:
+                    count += len(items)
+
+                last_key = query_result.get("last_evaluated_key")
+                if not last_key:
+                    break
+
+            logger.info(f"Contagem via UserIdIndex: {count} resultados")
+            return {"total_count": count}
+
+        except Exception as e:
+            logger.exception(f"Erro ao contar via user index otimizado: {e}")
+            raise
+
+    async def get_all_results_cursor_based(
+        self,
+        limit: int = 20,
+        cursor: Optional[str] = None,
+        status_filter: Optional[str] = None,
+        user_id: Optional[str] = None,
+        device_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        exclude_errors: bool = False,
+    ) -> Dict[str, Any]:
+        try:
+            import base64
+            import json
+
+            logger.info(f"Cursor-based query: limit={limit}, cursor={cursor}, user={user_id}")
+
+            last_evaluated_key = None
+            if cursor:
+                try:
+                    decoded = base64.b64decode(cursor).decode()
+                    last_evaluated_key = json.loads(decoded)
+                except Exception as e:
+                    logger.warning(f"Invalid cursor: {e}")
+
+            filter_parts = []
+            expression_values = {}
+            expression_names = {}
+
+            if status_filter:
+                filter_parts.append("#status = :status")
+                expression_values[":status"] = status_filter
+                expression_names["#status"] = "status"
+            elif exclude_errors:
+                filter_parts.append("(#status <> :error_status OR #status <> :failed_status)")
+                expression_values[":error_status"] = "error"
+                expression_values[":failed_status"] = "failed"
+                expression_names["#status"] = "status"
+
+            if start_date:
+                filter_parts.append("created_at >= :start_date")
+                expression_values[":start_date"] = start_date.isoformat()
+
+            if end_date:
+                filter_parts.append("created_at <= :end_date")
+                expression_values[":end_date"] = end_date.isoformat()
+
+            filter_expression = " AND ".join(filter_parts) if filter_parts else None
+
+            if user_id:
+                query_result = await self.dynamo_client.query_with_pagination(
+                    key_name="user_id",
+                    key_value=user_id,
+                    index_name="UserIdIndex",
+                    limit=limit,
+                    last_evaluated_key=last_evaluated_key,
+                    scan_index_forward=False,
+                    filter_expression=filter_expression,
+                    expression_values=expression_values if expression_values else None,
+                    expression_names=expression_names if expression_names else None,
+                )
+            else:
+                query_result = await self.dynamo_client.query_with_pagination(
+                    key_name="entity_type",
+                    key_value="COMBINED_RESULT",
+                    index_name="EntityTypeIndex",
+                    limit=limit,
+                    last_evaluated_key=last_evaluated_key,
+                    scan_index_forward=False,
+                    filter_expression=filter_expression,
+                    expression_values=expression_values if expression_values else None,
+                    expression_names=expression_names if expression_names else None,
+                )
+
+            items = query_result.get("items", [])
+
+            if device_id:
+                items = [item for item in items if self._matches_device_id(item, device_id)]
+
+            formatted_items = [self._format_result_item(item) for item in items]
+
+            next_cursor = None
+            if query_result.get("last_evaluated_key"):
+                next_key_json = json.dumps(query_result["last_evaluated_key"])
+                next_cursor = base64.b64encode(next_key_json.encode()).decode()
+
+            return {
+                "items": formatted_items,
+                "next_cursor": next_cursor,
+                "has_more": next_cursor is not None,
+            }
+
+        except Exception as e:
+            logger.exception(f"Erro ao buscar resultados cursor-based: {e}")
+            raise

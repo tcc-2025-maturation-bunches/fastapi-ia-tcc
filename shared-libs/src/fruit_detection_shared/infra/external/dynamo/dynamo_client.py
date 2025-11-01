@@ -189,20 +189,58 @@ class DynamoClient:
                 if last_evaluated_key:
                     query_kwargs["ExclusiveStartKey"] = last_evaluated_key
 
-                if filter_expression and expression_values:
-                    filter_conditions = []
-                    for expr_part in filter_expression.split(" AND "):
-                        expr_part = expr_part.strip()
-                        if "=" in expr_part:
-                            attr_name = expr_part.split("=")[0].strip().replace("#", "")
-                            value_key = expr_part.split("=")[1].strip()
-                            if attr_name in expression_names:
-                                attr_name = expression_names[attr_name]
-                            filter_conditions.append(Attr(attr_name).eq(expression_values[value_key]))
+                if filter_expression:
+                    conditions = []
+                    for part in filter_expression.split(" AND "):
+                        part = part.strip()
 
-                    if filter_conditions:
-                        combined_filter = filter_conditions[0]
-                        for condition in filter_conditions[1:]:
+                        if " >= " in part:
+                            attr, value_key = part.split(" >= ")
+                            attr = attr.strip()
+                            value_key = value_key.strip()
+                            original_attr = attr
+                            attr = attr.replace("#", "")
+                            if expression_names and original_attr in expression_names:
+                                attr = expression_names[original_attr]
+                            if expression_values and value_key in expression_values:
+                                conditions.append(Attr(attr).gte(expression_values[value_key]))
+
+                        elif " <= " in part:
+                            attr, value_key = part.split(" <= ")
+                            attr = attr.strip()
+                            value_key = value_key.strip()
+                            original_attr = attr
+                            attr = attr.replace("#", "")
+                            if expression_names and original_attr in expression_names:
+                                attr = expression_names[original_attr]
+                            if expression_values and value_key in expression_values:
+                                conditions.append(Attr(attr).lte(expression_values[value_key]))
+
+                        elif " <> " in part:
+                            attr, value_key = part.split(" <> ")
+                            attr = attr.strip()
+                            value_key = value_key.strip()
+                            original_attr = attr
+                            attr = attr.replace("#", "")
+                            if expression_names and original_attr in expression_names:
+                                attr = expression_names[original_attr]
+                            if expression_values and value_key in expression_values:
+                                conditions.append(Attr(attr).ne(expression_values[value_key]))
+
+                        elif " = " in part:
+                            attr, value_key = part.split(" = ")
+                            attr = attr.strip()
+                            value_key = value_key.strip()
+                            original_attr = attr
+                            attr = attr.replace("#", "")
+                            if expression_names and original_attr in expression_names:
+                                attr = expression_names[original_attr]
+                            if expression_values and value_key in expression_values:
+                                conditions.append(Attr(attr).eq(expression_values[value_key]))
+
+                    if conditions:
+                        combined_filter = conditions[0]
+                        for condition in conditions[1:]:
                             combined_filter = combined_filter & condition
                         query_kwargs["FilterExpression"] = combined_filter
 
