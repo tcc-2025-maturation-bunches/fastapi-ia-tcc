@@ -196,37 +196,45 @@ class DynamoClient:
 
                         if " >= " in part:
                             attr, value_key = part.split(" >= ")
-                            attr = attr.strip().replace("#", "")
+                            attr = attr.strip()
                             value_key = value_key.strip()
-                            if expression_names and f"#{attr}" in expression_names:
-                                attr = expression_names[f"#{attr}"]
+                            original_attr = attr
+                            attr = attr.replace("#", "")
+                            if expression_names and original_attr in expression_names:
+                                attr = expression_names[original_attr]
                             if expression_values and value_key in expression_values:
                                 conditions.append(Attr(attr).gte(expression_values[value_key]))
 
                         elif " <= " in part:
                             attr, value_key = part.split(" <= ")
-                            attr = attr.strip().replace("#", "")
+                            attr = attr.strip()
                             value_key = value_key.strip()
-                            if expression_names and f"#{attr}" in expression_names:
-                                attr = expression_names[f"#{attr}"]
+                            original_attr = attr
+                            attr = attr.replace("#", "")
+                            if expression_names and original_attr in expression_names:
+                                attr = expression_names[original_attr]
                             if expression_values and value_key in expression_values:
                                 conditions.append(Attr(attr).lte(expression_values[value_key]))
 
                         elif " <> " in part:
                             attr, value_key = part.split(" <> ")
-                            attr = attr.strip().replace("#", "")
+                            attr = attr.strip()
                             value_key = value_key.strip()
-                            if expression_names and f"#{attr}" in expression_names:
-                                attr = expression_names[f"#{attr}"]
+                            original_attr = attr
+                            attr = attr.replace("#", "")
+                            if expression_names and original_attr in expression_names:
+                                attr = expression_names[original_attr]
                             if expression_values and value_key in expression_values:
                                 conditions.append(Attr(attr).ne(expression_values[value_key]))
 
                         elif " = " in part:
                             attr, value_key = part.split(" = ")
-                            attr = attr.strip().replace("#", "")
+                            attr = attr.strip()
                             value_key = value_key.strip()
-                            if expression_names and f"#{attr}" in expression_names:
-                                attr = expression_names[f"#{attr}"]
+                            original_attr = attr
+                            attr = attr.replace("#", "")
+                            if expression_names and original_attr in expression_names:
+                                attr = expression_names[original_attr]
                             if expression_values and value_key in expression_values:
                                 conditions.append(Attr(attr).eq(expression_values[value_key]))
 

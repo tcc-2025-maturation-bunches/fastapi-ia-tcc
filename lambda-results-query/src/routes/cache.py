@@ -1,5 +1,4 @@
 import logging
-from functools import lru_cache
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -25,7 +24,6 @@ class CacheClearResponse(BaseModel):
     keys_removed: Optional[int] = None
 
 
-@lru_cache()
 def get_cache_service() -> CacheService:
     return CacheService(ttl_seconds=settings.CACHE_TTL_SECONDS)
 
