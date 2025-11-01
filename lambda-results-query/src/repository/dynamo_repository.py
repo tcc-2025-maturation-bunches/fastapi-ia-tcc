@@ -711,6 +711,8 @@ class DynamoRepository:
         end_date: Optional[datetime] = None,
         exclude_errors: bool = False,
     ) -> bool:
+        if item.get("entity_type") != "COMBINED_RESULT":
+            return False
         if not self._matches_status_filter(item, status_filter, exclude_errors):
             return False
         if not self._matches_date_range(item, start_date, end_date):

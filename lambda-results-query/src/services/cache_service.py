@@ -15,7 +15,7 @@ class CacheService:
     def _generate_key(self, prefix: str, **kwargs: Any) -> str:
         sorted_params = sorted(kwargs.items())
         params_str = json.dumps(sorted_params, sort_keys=True, default=str)
-        hash_suffix = hashlib.md5(params_str.encode()).hexdigest()[:12]
+        hash_suffix = hashlib.sha256(params_str.encode()).hexdigest()[:16]
         return f"{prefix}:{hash_suffix}"
 
     def _is_expired(self, entry: Dict[str, Any]) -> bool:
@@ -74,3 +74,10 @@ class CacheService:
             "expired_keys": expired_keys,
             "active_keys": total_keys - expired_keys,
         }
+
+    def count_keys_by_prefix(self, prefix: str) -> int:
+        return sum(1 for k in self._cache.keys() if k.startswith(f"{prefix}:"))
+
+    def key_exists(self, prefix: str, **kwargs: Any) -> bool:
+        key = self._generate_key(prefix, **kwargs)
+        return key in self._cache

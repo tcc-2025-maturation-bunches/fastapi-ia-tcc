@@ -68,8 +68,7 @@ async def clear_cache_by_prefix(
     try:
         logger.info(f"Limpando cache com prefixo: {prefix}")
 
-        keys_before = [k for k in cache_service._cache.keys() if k.startswith(f"{prefix}:")]
-        keys_count = len(keys_before)
+        keys_count = cache_service.count_keys_by_prefix(prefix)
 
         await cache_service.clear_prefix(prefix)
 
@@ -96,17 +95,16 @@ async def clear_cache_by_key(
     try:
         logger.info(f"Removendo chave específica do cache: {prefix}")
 
-        key = cache_service._generate_key(prefix, **kwargs)
-        key_exists = key in cache_service._cache
+        key_exists = cache_service.key_exists(prefix, **kwargs)
 
         await cache_service.delete(prefix, **kwargs)
 
         if key_exists:
-            logger.info(f"Chave removida do cache: {key}")
-            return CacheClearResponse(success=True, message=f"Chave '{key}' removida com sucesso", keys_removed=1)
+            logger.info(f"Chave removida do cache: {prefix}")
+            return CacheClearResponse(success=True, message="Chave removida com sucesso", keys_removed=1)
         else:
-            logger.info(f"Chave não encontrada no cache: {key}")
-            return CacheClearResponse(success=True, message=f"Chave '{key}' não encontrada no cache", keys_removed=0)
+            logger.info(f"Chave não encontrada no cache: {prefix}")
+            return CacheClearResponse(success=True, message="Chave não encontrada no cache", keys_removed=0)
     except Exception as e:
         logger.exception(f"Erro ao remover chave do cache: {e}")
         raise HTTPException(

@@ -23,7 +23,9 @@ class ResultsService:
         self, dynamo_repository: Optional[DynamoRepository] = None, cache_service: Optional[CacheService] = None
     ):
         self.dynamo_repository = dynamo_repository or DynamoRepository()
-        self.cache_service = cache_service or CacheService(ttl_seconds=settings.CACHE_TTL_SECONDS)
+        if cache_service is None:
+            cache_service = CacheService(ttl_seconds=settings.CACHE_TTL_SECONDS)
+        self.cache_service = cache_service
 
     async def get_by_request_id(self, request_id: str) -> Optional[Dict[str, Any]]:
         try:
@@ -459,24 +461,28 @@ class ResultsService:
                 if not maturation_distribution or not isinstance(maturation_distribution, dict):
                     continue
 
+                item_total_count = 0
                 for key in MATURATION_KEYS:
                     count = maturation_distribution.get(key, 0)
                     maturation_counts[key] += count
                     location_data[location][key] += count
                     total_objects += count
+                    item_total_count += count
 
                     if day_str != "Unknown":
                         if day_str not in trend_data:
                             trend_data[day_str] = {k: 0 for k in MATURATION_KEYS}
                             trend_data[day_str]["total"] = 0
                         trend_data[day_str][key] += count
-                        trend_data[day_str]["total"] += count
 
                         if day_str not in location_daily_data[location]:
                             location_daily_data[location][day_str] = {k: 0 for k in MATURATION_KEYS}
                             location_daily_data[location][day_str]["total"] = 0
                         location_daily_data[location][day_str][key] += count
-                        location_daily_data[location][day_str]["total"] += count
+
+                if day_str != "Unknown":
+                    trend_data[day_str]["total"] += item_total_count
+                    location_daily_data[location][day_str]["total"] += item_total_count
 
             maturation_distribution = [
                 MaturationDistributionItem(key=key, value=maturation_counts[key]) for key in MATURATION_KEYS

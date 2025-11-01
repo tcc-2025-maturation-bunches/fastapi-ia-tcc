@@ -194,16 +194,7 @@ class DynamoClient:
                     for part in filter_expression.split(" AND "):
                         part = part.strip()
 
-                        if " <> " in part:
-                            attr, value_key = part.split(" <> ")
-                            attr = attr.strip().replace("#", "")
-                            value_key = value_key.strip()
-                            if expression_names and f"#{attr}" in expression_names:
-                                attr = expression_names[f"#{attr}"]
-                            if expression_values and value_key in expression_values:
-                                conditions.append(Attr(attr).ne(expression_values[value_key]))
-
-                        elif " >= " in part:
+                        if " >= " in part:
                             attr, value_key = part.split(" >= ")
                             attr = attr.strip().replace("#", "")
                             value_key = value_key.strip()
@@ -220,6 +211,15 @@ class DynamoClient:
                                 attr = expression_names[f"#{attr}"]
                             if expression_values and value_key in expression_values:
                                 conditions.append(Attr(attr).lte(expression_values[value_key]))
+
+                        elif " <> " in part:
+                            attr, value_key = part.split(" <> ")
+                            attr = attr.strip().replace("#", "")
+                            value_key = value_key.strip()
+                            if expression_names and f"#{attr}" in expression_names:
+                                attr = expression_names[f"#{attr}"]
+                            if expression_values and value_key in expression_values:
+                                conditions.append(Attr(attr).ne(expression_values[value_key]))
 
                         elif " = " in part:
                             attr, value_key = part.split(" = ")
