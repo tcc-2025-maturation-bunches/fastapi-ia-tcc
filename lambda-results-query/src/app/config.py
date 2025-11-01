@@ -19,6 +19,10 @@ class Settings:
         self.MAX_QUERY_LIMIT = int(os.getenv("MAX_QUERY_LIMIT", "200"))
         self.DEFAULT_PAGE_SIZE = int(os.getenv("DEFAULT_PAGE_SIZE", "20"))
 
+        self.CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "300"))
+        self.CACHE_COUNT_TTL_SECONDS = int(os.getenv("CACHE_COUNT_TTL_SECONDS", "600"))
+        self.CACHE_STATS_TTL_SECONDS = int(os.getenv("CACHE_STATS_TTL_SECONDS", "900"))
+
         self.CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
         self.CORS_METHODS = ["GET", "OPTIONS"]
         self.CORS_HEADERS = ["*"]

@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.app.config import settings
-from src.routes import health_router, results_router
+from src.routes import cache_router, health_router, results_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -94,6 +94,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
+app.include_router(cache_router, prefix="/cache", tags=["Cache"])
 app.include_router(health_router, prefix="/health", tags=["Health"])
 app.include_router(results_router, prefix="/results", tags=["Results"])
 
@@ -106,6 +107,7 @@ async def root():
         "environment": settings.ENVIRONMENT,
         "status": "operational",
         "endpoints": {
+            "cache": "/cache",
             "health": "/health",
             "results": "/results",
             "docs": "/docs" if not settings.is_production() else "disabled",
