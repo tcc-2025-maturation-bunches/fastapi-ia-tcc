@@ -64,7 +64,7 @@ async def detailed_health_check():
     }
 
     if overall_status == "degraded":
-        logger.warning("Health check detected degraded dependencies")
+        logger.warning("Verificação de saúde detectou dependências degradadas")
 
     health_data = {
         "status": overall_status,
@@ -87,7 +87,7 @@ async def readiness_check():
         return {"ready": True, "timestamp": datetime.now(timezone.utc).isoformat()}
 
     except Exception as e:
-        logger.exception(f"Readiness check failed: {e}")
+        logger.exception(f"Verificação de prontidão falhou: {e}")
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail={"ready": False, "error": str(e)})
 
 

@@ -27,6 +27,14 @@ class PaginatedResultsResponse(BaseModel):
     filters_applied: Dict[str, Any]
 
 
+class CursorBasedResultsResponse(BaseModel):
+    items: List[Dict[str, Any]]
+    next_cursor: Optional[str]
+    has_more: bool
+    count: int
+    filters_applied: Dict[str, Any]
+
+
 def get_results_service() -> ResultsService:
     return ResultsService()
 
@@ -231,3 +239,50 @@ async def get_inference_stats(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro ao gerar estatísticas de inferência: {str(e)}",
         )
+
+
+@results_router.get("/all-cursor", response_model=CursorBasedResultsResponse)
+async def get_all_results_cursor(
+    cursor: Optional[str] = Query(None, description="Cursor para a página seguinte"),
+    page_size: int = Query(
+        settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_QUERY_LIMIT, description="Itens por página"
+    ),
+    status_filter: Optional[str] = Query(None, description="Filtrar por status"),
+    user_id: Optional[str] = Query(None, description="Filtrar por user_id"),
+    device_id: Optional[str] = Query(None, description="Filtrar por device_id"),
+    start_date: Optional[datetime] = Query(
+        None, description="Data inicial (ISO 8601: YYYY-MM-DD ou YYYY-MM-DDTHH:MM:SS)"
+    ),
+    end_date: Optional[datetime] = Query(None, description="Data final (ISO 8601: YYYY-MM-DD ou YYYY-MM-DDTHH:MM:SS)"),
+    exclude_errors: bool = Query(False, description="Excluir resultados com erro"),
+    results_service: ResultsService = Depends(get_results_service),
+):
+    try:
+        validated_device_id = validate_device_id(device_id) if device_id else None
+
+        date_range_filter = DateRangeFilter(start_date=start_date, end_date=end_date)
+
+        result = await results_service.get_all_results_cursor_based(
+            limit=page_size,
+            cursor=cursor,
+            status_filter=status_filter,
+            user_id=user_id,
+            device_id=validated_device_id,
+            start_date=date_range_filter.start_date,
+            end_date=date_range_filter.end_date,
+            exclude_errors=exclude_errors,
+        )
+
+        return CursorBasedResultsResponse(
+            items=result["items"],
+            next_cursor=result.get("next_cursor"),
+            has_more=result["has_more"],
+            count=result["count"],
+            filters_applied=result.get("filters_applied", {}),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Erro ao recuperar todos os resultados com cursor: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao recuperar resultados")
