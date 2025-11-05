@@ -69,7 +69,7 @@ class ErrorHandler:
         if context:
             error_response["context"] = context
 
-        logger.error(f"Error response created: {error_response}")
+        logger.error(f"Resposta de erro criada: {error_response}")
 
         return error_response
 

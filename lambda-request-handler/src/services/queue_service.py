@@ -63,15 +63,15 @@ class QueueService:
                 message_group_id=settings.SQS_MESSAGE_GROUP_ID,
             )
 
-            logger.info(f"Message sent to SQS: {response['MessageId']} for request {request_id}")
+            logger.info(f"Mensagem enviada para SQS: {response['MessageId']} para requisição {request_id}")
 
             return {"message_id": response["MessageId"], "request_id": request_id, "status": "queued"}
 
         except ClientError as e:
-            logger.exception(f"Error sending message to SQS: {e}")
-            raise Exception(f"Failed to queue processing request: {str(e)}")
+            logger.exception(f"Erro ao enviar mensagem para SQS: {e}")
+            raise Exception(f"Falha ao enfileirar requisição de processamento: {str(e)}")
         except Exception as e:
-            logger.exception(f"Unexpected error in queue service: {e}")
+            logger.exception(f"Erro inesperado no serviço de fila: {e}")
             raise
 
     async def send_batch_messages(self, messages: list[Dict[str, Any]]) -> Dict[str, Any]:
@@ -95,7 +95,7 @@ class QueueService:
             successful = len(response.get("Successful", []))
             failed = len(response.get("Failed", []))
 
-            logger.info(f"Batch send completed: {successful} successful, {failed} failed")
+            logger.info(f"Envio em lote concluído: {successful} bem-sucedidos, {failed} falharam")
 
             return {
                 "successful": response.get("Successful", []),
@@ -105,8 +105,8 @@ class QueueService:
             }
 
         except ClientError as e:
-            logger.exception(f"Error sending batch messages to SQS: {e}")
-            raise Exception(f"Failed to send batch messages: {str(e)}")
+            logger.exception(f"Erro ao enviar mensagens em lote para SQS: {e}")
+            raise Exception(f"Falha ao enviar mensagens em lote: {str(e)}")
 
     async def get_queue_attributes(self) -> Dict[str, Any]:
         try:
