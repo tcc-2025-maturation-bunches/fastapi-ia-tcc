@@ -85,7 +85,7 @@ async def detailed_health_check():
     }
 
     if health_status["status"] == "degraded":
-        logger.warning("Health check detected degraded dependencies")
+        logger.warning("Health check detectou dependências degradadas")
 
     return health_status
 
@@ -95,7 +95,7 @@ async def readiness_check():
     try:
         queue_service = QueueService()
         if not queue_service.validate_queue_connection():
-            return {"ready": False, "reason": "Cannot connect to SQS queue"}, status.HTTP_503_SERVICE_UNAVAILABLE
+            return {"ready": False, "reason": "Não é possível conectar à fila SQS"}, status.HTTP_503_SERVICE_UNAVAILABLE
 
         return {"ready": True, "timestamp": datetime.now(timezone.utc).isoformat()}
 
