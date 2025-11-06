@@ -27,7 +27,7 @@ class PresignedURLService:
     ) -> Dict[str, Any]:
         try:
             if purpose == "image" and not settings.validate_image_type(content_type):
-                raise ValueError(f"Invalid content type: {content_type}")
+                raise ValueError(f"Tipo de conteúdo inválido: {content_type}")
 
             key = self._generate_s3_key(filename, user_id, purpose)
             bucket = self.images_bucket if purpose == "image" else self.results_bucket
@@ -51,7 +51,7 @@ class PresignedURLService:
             )
 
             public_url = settings.get_s3_url(bucket, key)
-            logger.info(f"Generated presigned URL for {purpose}: {unique_id}")
+            logger.info(f"URL presigned gerada para {purpose}: {unique_id}")
 
             return {
                 "upload_url": presigned_url,
@@ -64,10 +64,10 @@ class PresignedURLService:
             }
 
         except ClientError as e:
-            logger.exception(f"Error generating presigned URL: {e}")
-            raise Exception(f"Failed to generate upload URL: {str(e)}")
+            logger.exception(f"Erro ao gerar URL presigned: {e}")
+            raise Exception(f"Falha ao gerar URL de upload: {str(e)}")
         except Exception as e:
-            logger.exception(f"Unexpected error in presigned URL service: {e}")
+            logger.exception(f"Erro inesperado no serviço de URL presigned: {e}")
             raise
 
     async def generate_download_url(self, key: str, bucket: Optional[str] = None, expiry_minutes: int = 60) -> str:
@@ -78,12 +78,12 @@ class PresignedURLService:
                 "get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=expiry_minutes * 60
             )
 
-            logger.info(f"Generated download URL for key: {key}")
+            logger.info(f"URL de download gerada para chave: {key}")
             return presigned_url
 
         except ClientError as e:
-            logger.exception(f"Error generating download URL: {e}")
-            raise Exception(f"Failed to generate download URL: {str(e)}")
+            logger.exception(f"Erro ao gerar URL de download: {e}")
+            raise Exception(f"Falha ao gerar URL de download: {str(e)}")
 
     async def validate_file_exists(self, key: str, bucket: Optional[str] = None) -> bool:
         try:
@@ -95,7 +95,7 @@ class PresignedURLService:
         except ClientError as e:
             if e.response["Error"]["Code"] == "404":
                 return False
-            logger.exception(f"Error checking file existence: {e}")
+            logger.exception(f"Erro ao verificar existência do arquivo: {e}")
             raise
 
     def _generate_s3_key(self, filename: str, user_id: str, purpose: str = "image") -> str:

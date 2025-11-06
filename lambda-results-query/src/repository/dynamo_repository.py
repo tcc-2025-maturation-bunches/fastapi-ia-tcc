@@ -886,7 +886,7 @@ class DynamoRepository:
                     decoded = base64.b64decode(cursor).decode()
                     last_evaluated_key = json.loads(decoded)
                 except Exception as e:
-                    logger.warning(f"Invalid cursor: {e}")
+                    logger.warning(f"Cursor inválido: {e}")
 
             filter_parts = []
             expression_values = {}
