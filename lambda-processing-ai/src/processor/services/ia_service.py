@@ -56,10 +56,10 @@ class IAService:
             self._health_cache = {"status": is_healthy, "last_check": current_time}
             return is_healthy
         except asyncio.TimeoutError:
-            logger.warning("Health check timeout, usando cache")
+            logger.warning("Timeout no health check, usando cache")
             return self._health_cache["status"]
         except Exception as e:
-            logger.error(f"Health check error: {e}")
+            logger.error(f"Erro no health check: {e}")
             return False
 
     async def process_image(

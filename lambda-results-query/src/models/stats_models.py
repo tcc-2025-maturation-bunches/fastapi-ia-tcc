@@ -1,15 +1,23 @@
-from typing import List, Optional
+from typing import List
 
 from pydantic import BaseModel
 
 
 class MaturationDistributionItem(BaseModel):
-    name: str
+    key: str
     value: int
-    color: Optional[str] = None
 
 
 class MaturationTrendItem(BaseModel):
+    date: str
+    verde: int
+    quase_maduro: int
+    maduro: int
+    muito_maduro_ou_passado: int
+    total: int
+
+
+class LocationDailyItem(BaseModel):
     date: str
     verde: int
     quase_maduro: int
@@ -25,6 +33,7 @@ class LocationCountItem(BaseModel):
     quase_maduro: int
     maduro: int
     muito_maduro_ou_passado: int
+    daily_trend: List[LocationDailyItem]
 
 
 class InferenceStatsResponse(BaseModel):
