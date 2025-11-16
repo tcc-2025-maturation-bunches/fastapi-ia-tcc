@@ -144,3 +144,13 @@ class UserService:
         except Exception as e:
             logger.exception(f"Erro ao deletar usuário: {e}")
             raise
+
+    async def get_all_users(self) -> list[User]:
+        try:
+            users_data = await self.repository.list_all_users()
+            users = [User.from_dict(user_data) for user_data in users_data]
+            logger.info(f"Listados {len(users)} usuários")
+            return users
+        except Exception as e:
+            logger.exception(f"Erro ao listar todos os usuários: {e}")
+            raise
