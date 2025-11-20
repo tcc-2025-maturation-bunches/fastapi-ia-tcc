@@ -1,8 +1,10 @@
 import logging
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from src.models.user_model import UserCreate, UserResponse, UserUpdate
+from src.services.auth_service import AuthService
 from src.services.user_service import UserService
 
 logger = logging.getLogger(__name__)
@@ -15,13 +17,96 @@ def get_user_service() -> UserService:
     return UserService()
 
 
+def get_auth_service() -> AuthService:
+    """Dependency injection para AuthService"""
+    return AuthService()
+
+
+async def verify_admin(
+    authorization: Optional[str] = Header(None), auth_service: AuthService = Depends(get_auth_service)
+):
+    """Verifica se o usuário é admin através do token JWT"""
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de autenticação não fornecido",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise ValueError("Esquema de autenticação inválido")
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Formato de token inválido. Use 'Bearer <token>'",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    payload = auth_service.verify_token(token)
+
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido ou expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_type = payload.get("user_type")
+    if user_type != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado. Apenas administradores podem acessar este recurso",
+        )
+
+    return payload
+
+
+@user_router.get(
+    "/",
+    response_model=list[UserResponse],
+    summary="Listar todos os usuários",
+    description="Retorna lista de todos os usuários. Requer permissão de administrador.",
+)
+async def list_all_users(user_service: UserService = Depends(get_user_service), _: dict = Depends(verify_admin)):
+    """
+    Lista todos os usuários do sistema.
+    Apenas usuários com user_type='admin' podem acessar este endpoint.
+
+    Returns:
+        Lista de usuários
+
+    Raises:
+        HTTPException: Se não autenticado ou não é admin
+    """
+    logger.info("Listando todos os usuários")
+
+    users = await user_service.get_all_users()
+
+    return [
+        UserResponse(
+            id=user.user_id,
+            username=user.username,
+            name=user.name,
+            email=user.email,
+            user_type=user.user_type,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+        )
+        for user in users
+    ]
+
+
 @user_router.get(
     "/{user_id}",
     response_model=UserResponse,
     summary="Obter usuário por ID",
     description="Recuperar detalhes do usuário pelo ID do usuário",
 )
-async def get_user(user_id: str, user_service: UserService = Depends(get_user_service)):
+async def get_user(
+    user_id: str, user_service: UserService = Depends(get_user_service), _: dict = Depends(verify_admin)
+):
     """
     Busca um usuário pelo ID.
 
@@ -59,7 +144,9 @@ async def get_user(user_id: str, user_service: UserService = Depends(get_user_se
     summary="Obter usuário por nome de usuário",
     description="Recuperar detalhes do usuário pelo nome de usuário",
 )
-async def get_user_by_username(username: str, user_service: UserService = Depends(get_user_service)):
+async def get_user_by_username(
+    username: str, user_service: UserService = Depends(get_user_service), _: dict = Depends(verify_admin)
+):
     """
     Busca um usuário pelo nome de usuário.
 
@@ -100,7 +187,9 @@ async def get_user_by_username(username: str, user_service: UserService = Depend
     description="Criar um novo usuário com os detalhes fornecidos",
     status_code=status.HTTP_201_CREATED,
 )
-async def create_user(user_data: UserCreate, user_service: UserService = Depends(get_user_service)):
+async def create_user(
+    user_data: UserCreate, user_service: UserService = Depends(get_user_service), _: dict = Depends(verify_admin)
+):
     """
     Cria um novo usuário.
 
@@ -150,7 +239,12 @@ async def create_user(user_data: UserCreate, user_service: UserService = Depends
     summary="Atualizar usuário",
     description="Atualizar detalhes do usuário pelo ID do usuário",
 )
-async def update_user(user_id: str, user_update: UserUpdate, user_service: UserService = Depends(get_user_service)):
+async def update_user(
+    user_id: str,
+    user_update: UserUpdate,
+    user_service: UserService = Depends(get_user_service),
+    _: dict = Depends(verify_admin),
+):
     """
     Atualiza dados de um usuário.
 
@@ -203,7 +297,9 @@ async def update_user(user_id: str, user_update: UserUpdate, user_service: UserS
     description="Excluir usuário pelo ID do usuário",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def delete_user(user_id: str, user_service: UserService = Depends(get_user_service)):
+async def delete_user(
+    user_id: str, user_service: UserService = Depends(get_user_service), _: dict = Depends(verify_admin)
+):
     """
     Remove um usuário do sistema.
 

@@ -74,3 +74,12 @@ class DynamoRepository:
         except Exception as e:
             logger.exception(f"Erro ao deletar usuário: {e}")
             raise
+
+    async def list_all_users(self) -> list[Dict[str, Any]]:
+        try:
+            logger.info("Listando todos os usuários")
+            items = await self.dynamo_client.scan()
+            return items
+        except Exception as e:
+            logger.exception(f"Erro ao listar usuários: {e}")
+            raise

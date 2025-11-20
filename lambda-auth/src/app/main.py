@@ -69,14 +69,11 @@ async def log_requests(request: Request, call_next):
         f"Requisição: {request.method} {request.url.path} "
         f"- User-Agent: {request.headers.get('user-agent', 'unknown')}"
     )
+
     response = await call_next(request)
 
     process_time = time.time() - start_time
-    logger.info(
-        f"Resposta: {request.method} {request.url.path} "
-        f"- Status: {response.status_code} "
-        f"- Tempo: {process_time:.3f}s"
-    )
+    logger.info(f"{request.method} {request.url.path} {response.status_code} - {process_time:.3f}s")
 
     return response
 
@@ -95,7 +92,6 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Registrar rotas
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(user_router, prefix="/users", tags=["User Management"])
 
