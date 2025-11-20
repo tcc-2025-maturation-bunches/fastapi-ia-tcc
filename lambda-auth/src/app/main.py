@@ -8,11 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.app.config import settings
-from src.app.logging_config import configure_logging
 from src.routes.auth_routes import auth_router
 from src.routes.user_routes import user_router
 
-configure_logging(settings.LOG_LEVEL)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler()],
+)
 logger = logging.getLogger(__name__)
 
 

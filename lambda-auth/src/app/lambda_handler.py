@@ -4,11 +4,10 @@ from datetime import datetime, timezone
 
 from mangum import Mangum
 
-from src.app.logging_config import configure_logging
 from src.app.main import app
 
-configure_logging()
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 handler = Mangum(app, lifespan="off")
 
