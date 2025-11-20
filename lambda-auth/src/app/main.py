@@ -11,12 +11,14 @@ from src.app.config import settings
 from src.routes.auth_routes import auth_router
 from src.routes.user_routes import user_router
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler()],
-)
 logger = logging.getLogger(__name__)
+
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
 
 
 @asynccontextmanager
@@ -95,7 +97,6 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Registrar rotas
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(user_router, prefix="/users", tags=["User Management"])
 

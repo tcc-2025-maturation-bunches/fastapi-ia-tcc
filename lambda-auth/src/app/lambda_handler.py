@@ -6,8 +6,10 @@ from mangum import Mangum
 
 from src.app.main import app
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
+
+if not logger.handlers:
+    logger.setLevel(logging.INFO)
 
 handler = Mangum(app, lifespan="off")
 
