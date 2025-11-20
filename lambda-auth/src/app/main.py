@@ -8,17 +8,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.app.config import settings
+from src.app.logging_config import configure_logging
 from src.routes.auth_routes import auth_router
 from src.routes.user_routes import user_router
 
+configure_logging(settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
-
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
 
 
 @asynccontextmanager
@@ -71,14 +66,11 @@ async def log_requests(request: Request, call_next):
         f"Requisição: {request.method} {request.url.path} "
         f"- User-Agent: {request.headers.get('user-agent', 'unknown')}"
     )
+
     response = await call_next(request)
 
     process_time = time.time() - start_time
-    logger.info(
-        f"Resposta: {request.method} {request.url.path} "
-        f"- Status: {response.status_code} "
-        f"- Tempo: {process_time:.3f}s"
-    )
+    logger.info(f"{request.method} {request.url.path} {response.status_code} - {process_time:.3f}s")
 
     return response
 
